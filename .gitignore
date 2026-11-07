@@ -1,0 +1,9 @@
+# Runtime state (projects checkouts, config with env vars, caches)
+data/
+.env
+/self-hoster
+
+# Web admin app
+web/node_modules/
+internal/api/ui/dist/
+web/*.tsbuildinfo

@@ -1,0 +1,19 @@
+services:
+  self-hoster:
+    build: .
+    image: self-hoster:latest
+    container_name: self-hoster
+    restart: unless-stopped
+    # Leaves time for every project to stop gracefully (10s each, in parallel).
+    stop_grace_period: 30s
+    environment:
+      SELFHOSTER_ADMIN_PASSWORD: ${SELFHOSTER_ADMIN_PASSWORD:?set SELFHOSTER_ADMIN_PASSWORD in .env}
+      # Must match the published range below; projects outside it are rejected.
+      SELFHOSTER_PORTS: "4000-4019"
+    ports:
+      - "8080:8080"             # admin UI (keep it LAN-only)
+      - "4000-4019:4000-4019"   # one port per project, routed by your nginx
+    volumes:
+      - ./data:/data
+      # Private repos over SSH: mount a deploy key (read-only).
+      # - ./ssh:/root/.ssh:ro
