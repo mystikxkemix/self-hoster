@@ -1,0 +1,27 @@
+{
+  "name": "self-hoster",
+  // Same toolchains as the runtime image (see Dockerfile).
+  "image": "mcr.microsoft.com/devcontainers/base:trixie",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": { "version": "1.27" },
+    "ghcr.io/devcontainers/features/node:1": { "version": "24" }
+  },
+  "containerEnv": {
+    "SELFHOSTER_DATA_DIR": "${containerWorkspaceFolder}/data",
+    "SELFHOSTER_ADMIN_PASSWORD": "dev",
+    "SELFHOSTER_PORTS": "4000-4019"
+  },
+  // 8080: Go API + embedded UI, 5173: Vite dev server (hot reload), 4000-4019: hosted projects.
+  "forwardPorts": [8080, 5173],
+  "appPort": ["8080:8080", "5173:5173", "4000-4019:4000-4019"],
+  "portsAttributes": {
+    "8080": { "label": "self-hoster API" },
+    "5173": { "label": "admin UI (dev)", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "go mod download && cd web && npm ci --no-fund --no-audit",
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go"]
+    }
+  }
+}
