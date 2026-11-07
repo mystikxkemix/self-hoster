@@ -51,6 +51,10 @@ UI can run arbitrary commands.
   project so the change applies at once.
 - **Deploy** fetches the branch, builds, then swaps the process. If the build fails,
   the previous version keeps running.
+- **Auto-deploy** (on by default for new projects): self-hoster checks each running
+  project's branch every minute (`git ls-remote`) and deploys new commits. Nothing has
+  to reach the box: no webhook, no open port, no GitHub runner. A commit whose build
+  failed is not retried; the next push is. Stopped projects are never auto-deployed.
 - pnpm / yarn: use `corepack enable && pnpm install --frozen-lockfile && pnpm build`.
 
 ### Private repositories
@@ -95,6 +99,7 @@ the original ZimaBoard (Celeron N3350/N3450) has none and is stuck on `mongo:4.4
 | `SELFHOSTER_PORTS` | (any) | Allowed project port range, e.g. `4000-4019` |
 | `SELFHOSTER_ADDR` | `:8080` | Admin UI listen address |
 | `SELFHOSTER_DATA_DIR` | `/data` | State, checkouts and caches |
+| `SELFHOSTER_POLL_INTERVAL` | `1m` | Auto-deploy check interval (Go duration, `0` disables) |
 
 `SELFHOSTER_*` variables are never passed to projects.
 
@@ -102,10 +107,9 @@ the original ZimaBoard (Celeron N3350/N3450) has none and is stuck on `mongo:4.4
 
 All routes use basic auth. `GET/POST /api/projects`,
 `GET/PUT/DELETE /api/projects/{name}`, `POST /api/projects/{name}/{deploy|start|stop|restart}`,
-`GET /api/projects/{name}/logs`.
+`GET /api/projects/{name}/logs`. Unknown `/api` routes return a JSON 404.
 
-To deploy on every push, call the deploy route from a GitHub Action (the box must be
-reachable from it, e.g. through Tailscale):
+Auto-deploy usually makes manual calls unnecessary, but a deploy can be forced with:
 
 ```sh
 curl -fsS -u admin:$PASSWORD -X POST http://<zima-ip>:8080/api/projects/my-api/deploy

@@ -50,7 +50,16 @@ func New(st *store.Store, sup *supervisor.Supervisor, user, password string) htt
 	mux.HandleFunc("POST /api/projects/{name}/stop", s.stopProject)
 	mux.HandleFunc("POST /api/projects/{name}/restart", s.restartProject)
 	mux.HandleFunc("GET /api/projects/{name}/logs", s.projectLogs)
+	// Any other /api path (or a wrong method on an action) is an API error, not a UI page.
+	// Registered per method: a method-less "/api/" would conflict with "GET /".
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		mux.HandleFunc(method+" /api/", unknownAPIRoute)
+	}
 	return s.basicAuth(mux)
+}
+
+func unknownAPIRoute(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusNotFound, errors.New("unknown API route"))
 }
 
 // uiHandler serves the built admin app, or a placeholder explaining how to build it.

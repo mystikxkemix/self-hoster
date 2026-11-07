@@ -58,6 +58,7 @@ export function ProjectDetail({ project, onChanged, onDeleted }: Props) {
           <h2>
             {project.name}
             <span className="tag">{project.type === 'static' ? 'website' : 'service'}</span>
+            {project.autoDeploy && <span className="tag">auto-deploy</span>}
           </h2>
           <div className="meta">
             <StatusBadge status={status} />
