@@ -24,6 +24,6 @@
 - `GET /` is the UI catch-all; `<METHOD> /api/` routes (one per method) return a JSON 404. A method-less "/api/" pattern panics: it conflicts with "GET /" in Go's ServeMux.
 - Tests must not depend on the UI being built (CI runs Go tests without it). Shared git test helpers live in `internal/testutil`.
 - Git output can contain the repo URL (with a token): pass it through `redact` before surfacing it.
-- GitHub repo: github.com/madmike75/self-hoster (private), CI = .github/workflows/ci.yml.
+- GitHub repo: github.com/mystikxkemix/self-hoster (personal account). Pushes go over SSH with the personal key (repo-local `core.sshCommand` uses ~/.ssh/github_perso.pub); `gh` is logged in as the work account madmike75 and cannot see this repo. The old madmike75/self-hoster copy is obsolete.
 - CI (.github/workflows/ci.yml) pins Go 1.27 / Node 24: keep in sync with the Dockerfile and dev container.
 - zsh in this environment does not word-split `$VAR` in commands: use functions for curl helpers in tests.
