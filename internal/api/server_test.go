@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +12,7 @@ import (
 
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
+	"selfhoster/internal/testutil"
 )
 
 const (
@@ -96,29 +95,6 @@ func expect(t *testing.T, gotCode int, body string, wantCode int, wantInBody str
 	}
 }
 
-func newRepo(t *testing.T) string {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not installed")
-	}
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "README"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, args := range [][]string{
-		{"init", "-q"},
-		{"add", "-A"},
-		{"-c", "user.email=test@test", "-c", "user.name=test", "commit", "-q", "-m", "init"},
-	} {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	return dir
-}
-
 func waitDeployed(t *testing.T, sup *supervisor.Supervisor, name string) {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -160,6 +136,22 @@ func TestBasicAuth(t *testing.T) {
 	res.Body.Close()
 	if got := res.Header.Get("WWW-Authenticate"); !strings.HasPrefix(got, "Basic") {
 		t.Fatalf("WWW-Authenticate = %q, want a Basic challenge so browsers prompt", got)
+	}
+}
+
+// Unknown /api paths answer JSON, whether or not the web app was built, so API
+// clients never receive the UI page.
+func TestUnknownAPIRouteIsJSON404(t *testing.T) {
+	f := newFixture(t)
+	for _, path := range []string{"/api/", "/api/nope", "/api/projects/x/y/z", "/api/v2/projects"} {
+		for _, method := range []string{"GET", "POST", "DELETE"} {
+			code, body := f.do(method, path, "")
+			expect(t, code, body, http.StatusNotFound, `"error":"unknown API route"`)
+		}
+	}
+	code, _ := f.doAs("", "", "GET", "/api/nope", "")
+	if code != http.StatusUnauthorized {
+		t.Fatalf("unknown route without auth = %d, want 401 (auth first)", code)
 	}
 }
 
@@ -257,7 +249,7 @@ func TestUpdateProject(t *testing.T) {
 
 func TestLifecycleActions(t *testing.T) {
 	f := newFixture(t)
-	f.create("api", newRepo(t), `,"buildCmd":"sleep 1"`)
+	f.create("api", testutil.NewRepo(t, map[string]string{"README": "x"}), `,"buildCmd":"sleep 1"`)
 
 	code, body := f.do("POST", "/api/projects/api/start", "")
 	expect(t, code, body, http.StatusBadRequest, "not been deployed")
@@ -316,13 +308,12 @@ func TestActionsOnUnknownProject(t *testing.T) {
 }
 
 // Actions are POST-only, so following a link (GET) can never trigger a deploy.
-// The GET falls through to the UI route (404 with the built app, the placeholder page
-// without it), so only the absence of side effects is asserted.
 func TestActionsIgnoreGet(t *testing.T) {
 	f := newFixture(t)
 	f.create("api", "r", "")
 	for _, route := range []string{"deploy", "start", "stop", "restart"} {
-		f.do("GET", "/api/projects/api/"+route, "")
+		code, body := f.do("GET", "/api/projects/api/"+route, "")
+		expect(t, code, body, http.StatusNotFound, `"error":"unknown API route"`)
 	}
 	if st := f.sup.Status("api"); st.Deploying || st.State != supervisor.StateStopped {
 		t.Fatalf("status = %+v, a GET must not change anything", st)

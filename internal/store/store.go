@@ -43,6 +43,8 @@ type Project struct {
 	StaticDir string `json:"staticDir,omitempty"`
 	// SPA serves index.html for unknown paths, so client-side routing works on reload.
 	SPA bool `json:"spa,omitempty"`
+	// AutoDeploy redeploys the project when a new commit lands on its branch (polled).
+	AutoDeploy bool `json:"autoDeploy,omitempty"`
 	// Enabled records whether the project should be running. It is restored when the container boots.
 	Enabled bool `json:"enabled"`
 }

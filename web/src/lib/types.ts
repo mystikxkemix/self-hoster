@@ -26,6 +26,8 @@ export interface ProjectSpec {
   env?: Record<string, string>;
   staticDir?: string;
   spa?: boolean;
+  /** Redeploy automatically when a new commit lands on the branch (checked every minute). */
+  autoDeploy?: boolean;
 }
 
 export interface Project extends ProjectSpec {
@@ -46,5 +48,6 @@ export function toSpec(p: ProjectSpec): ProjectSpec {
     env: p.env,
     staticDir: p.type === 'static' ? p.staticDir : undefined,
     spa: p.type === 'static' ? p.spa : undefined,
+    autoDeploy: p.autoDeploy,
   };
 }

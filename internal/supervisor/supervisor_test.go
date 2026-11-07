@@ -15,43 +15,8 @@ import (
 	"time"
 
 	"selfhoster/internal/store"
+	"selfhoster/internal/testutil"
 )
-
-// newRepo creates a local git repository with the given files and returns its path.
-func newRepo(t *testing.T, files map[string]string) string {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not installed")
-	}
-	dir := t.TempDir()
-	for name, content := range files {
-		path := filepath.Join(dir, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	gitRun(t, dir, "init", "-q")
-	commitAll(t, dir, "init")
-	return dir
-}
-
-func commitAll(t *testing.T, dir, message string) {
-	t.Helper()
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "-c", "user.email=test@test", "-c", "user.name=test", "commit", "-q", "-m", message)
-}
-
-func gitRun(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-}
 
 // newSupervisor returns a supervisor whose projects are all stopped at the end of the test.
 func newSupervisor(t *testing.T) *Supervisor {
@@ -99,7 +64,7 @@ func service(name, repo, build, start string) store.Project {
 }
 
 func TestDeployBuildsAndRunsService(t *testing.T) {
-	repo := newRepo(t, map[string]string{"app.sh": "echo running\nexec sleep 60\n"})
+	repo := testutil.NewRepo(t, map[string]string{"app.sh": "echo running\nexec sleep 60\n"})
 	s := newSupervisor(t)
 	spec := service("app", repo, "echo built > built.txt", "sh app.sh")
 
@@ -133,7 +98,7 @@ func TestDeployBuildsAndRunsService(t *testing.T) {
 
 func TestEnvironmentIsInjectedAndSelfHosterSettingsAreHidden(t *testing.T) {
 	t.Setenv("SELFHOSTER_ADMIN_PASSWORD", "top-secret")
-	repo := newRepo(t, map[string]string{"README": "x"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
 	s := newSupervisor(t)
 	spec := service("env", repo, "env > build-env.txt", "env > run-env.txt; exec sleep 60")
 	spec.Port = 4321
@@ -167,7 +132,7 @@ func TestEnvironmentIsInjectedAndSelfHosterSettingsAreHidden(t *testing.T) {
 }
 
 func TestCrashedServiceIsRestarted(t *testing.T) {
-	repo := newRepo(t, map[string]string{"README": "x"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
 	s := newSupervisor(t)
 	// Crashes on the first run only: the marker file makes the second run stay up.
 	start := "if [ -f started ]; then exec sleep 60; fi; touch started; exit 3"
@@ -186,7 +151,7 @@ func TestCrashedServiceIsRestarted(t *testing.T) {
 }
 
 func TestStopCancelsPendingRestart(t *testing.T) {
-	repo := newRepo(t, map[string]string{"README": "x"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
 	s := newSupervisor(t)
 	if err := s.Deploy(service("dies", repo, "", "exit 1")); err != nil {
 		t.Fatal(err)
@@ -201,7 +166,7 @@ func TestStopCancelsPendingRestart(t *testing.T) {
 }
 
 func TestStopKillsTheWholeProcessGroup(t *testing.T) {
-	repo := newRepo(t, map[string]string{"README": "x"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
 	s := newSupervisor(t)
 	// The shell starts a grandchild, like `npm start` spawning node.
 	start := "sleep 60 & echo $! > child.pid; wait"
@@ -228,7 +193,7 @@ func isZombie(pid int) bool {
 }
 
 func TestFailedBuildKeepsPreviousVersionRunning(t *testing.T) {
-	repo := newRepo(t, map[string]string{"README": "v1"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "v1"})
 	s := newSupervisor(t)
 	spec := service("app", repo, "true", "exec sleep 60")
 	if err := s.Deploy(spec); err != nil {
@@ -251,7 +216,7 @@ func TestFailedBuildKeepsPreviousVersionRunning(t *testing.T) {
 }
 
 func TestRedeployPicksUpNewCommits(t *testing.T) {
-	repo := newRepo(t, map[string]string{"version.txt": "v1"})
+	repo := testutil.NewRepo(t, map[string]string{"version.txt": "v1"})
 	s := newSupervisor(t)
 	spec := service("app", repo, "", "exec sleep 60")
 	if err := s.Deploy(spec); err != nil {
@@ -262,7 +227,7 @@ func TestRedeployPicksUpNewCommits(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "version.txt"), []byte("v2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	commitAll(t, repo, "v2")
+	testutil.Commit(t, repo, "v2")
 	if err := s.Deploy(spec); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +243,7 @@ func TestRedeployPicksUpNewCommits(t *testing.T) {
 }
 
 func TestConcurrentDeployIsRejected(t *testing.T) {
-	repo := newRepo(t, map[string]string{"README": "x"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
 	s := newSupervisor(t)
 	spec := service("slow", repo, "sleep 1", "exec sleep 60")
 	if err := s.Deploy(spec); err != nil {
@@ -302,7 +267,7 @@ func TestStartBeforeDeployFails(t *testing.T) {
 }
 
 func TestRemoveDeletesCheckout(t *testing.T) {
-	repo := newRepo(t, map[string]string{"README": "x"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
 	s := newSupervisor(t)
 	if err := s.Deploy(service("gone", repo, "", "exec sleep 60")); err != nil {
 		t.Fatal(err)
@@ -320,7 +285,7 @@ func TestRemoveDeletesCheckout(t *testing.T) {
 }
 
 func TestStaticProjectIsServed(t *testing.T) {
-	repo := newRepo(t, map[string]string{"src/index.html": "<h1>site</h1>"})
+	repo := testutil.NewRepo(t, map[string]string{"src/index.html": "<h1>site</h1>"})
 	s := newSupervisor(t)
 	port := freePort(t)
 	spec := store.Project{
@@ -350,7 +315,7 @@ func TestStaticProjectIsServed(t *testing.T) {
 }
 
 func TestStaticProjectWithoutBuildOutputFails(t *testing.T) {
-	repo := newRepo(t, map[string]string{"README": "x"})
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
 	s := newSupervisor(t)
 	spec := store.Project{Name: "site", Type: store.TypeStatic, Repo: repo, Port: freePort(t), StaticDir: "dist"}
 	if err := s.Deploy(spec); err != nil {
