@@ -19,4 +19,6 @@
 - Frontend fetches build absolute URLs from `location.origin`: relative fetch throws when the page is opened as http://user:pass@host.
 - `docker-outside-of-docker` devcontainer feature fails to install on the trixie base image; not used.
 - `pkill -f <pattern>` inside `bash -c '...'` kills its own shell when the pattern is in the command string; use a script file.
+- `GET /` is a catch-all: unknown paths (even under /api) hit the UI handler. With the built app they 404, with the placeholder they return 200. Tests must not depend on the UI being built (CI runs Go tests without it).
+- CI (.github/workflows/ci.yml) pins Go 1.27 / Node 24: keep in sync with the Dockerfile and dev container.
 - zsh in this environment does not word-split `$VAR` in commands: use functions for curl helpers in tests.
