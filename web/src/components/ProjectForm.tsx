@@ -8,7 +8,7 @@ const PLACEHOLDERS: Record<ProjectType, { build: string; start?: string }> = {
   static: { build: 'npm ci && npm run build' },
 };
 
-const EMPTY: ProjectSpec = { name: '', type: 'service', repo: '', port: 4000, spa: true, staticDir: 'dist' };
+const EMPTY: ProjectSpec = { name: '', type: 'service', repo: '', port: 4000, spa: true, staticDir: 'dist', autoDeploy: true };
 
 interface Props {
   initial?: ProjectSpec;
@@ -111,6 +111,10 @@ export function ProjectForm({ initial, submitLabel, onSubmit, onCancel }: Props)
               placeholder="default branch"
               onChange={(e) => set('branch', e.target.value)}
             />
+          </label>
+          <label className="checkbox">
+            <input type="checkbox" checked={!!spec.autoDeploy} onChange={(e) => set('autoDeploy', e.target.checked)} />
+            Auto-deploy new commits (checked every minute)
           </label>
         </div>
       </section>

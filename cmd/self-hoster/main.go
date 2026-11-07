@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"selfhoster/internal/api"
+	"selfhoster/internal/autodeploy"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
 )
@@ -35,6 +36,11 @@ func run() error {
 	password := os.Getenv("SELFHOSTER_ADMIN_PASSWORD")
 	if password == "" {
 		return errors.New("SELFHOSTER_ADMIN_PASSWORD must be set")
+	}
+
+	pollInterval, err := time.ParseDuration(envOr("SELFHOSTER_POLL_INTERVAL", "1m"))
+	if err != nil {
+		return fmt.Errorf("SELFHOSTER_POLL_INTERVAL: %w", err)
 	}
 
 	opts, err := storeOptions(addr, os.Getenv("SELFHOSTER_PORTS"))
@@ -64,9 +70,28 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// The poller stops before projects do, so no deploy starts during shutdown.
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	pollDone := make(chan struct{})
+	go func() {
+		defer close(pollDone)
+		if pollInterval <= 0 {
+			log.Print("auto-deploy polling disabled")
+			return
+		}
+		log.Printf("auto-deploy: checking remotes every %s", pollInterval)
+		autodeploy.New(st, sup, pollInterval).Run(pollCtx)
+	}()
+	shutdown := func() {
+		stopPolling()
+		<-pollDone
+		sup.Shutdown()
+	}
+
 	select {
 	case err := <-serveErr:
-		sup.Shutdown()
+		shutdown()
 		return err
 	case <-ctx.Done():
 	}
@@ -75,7 +100,7 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
-	sup.Shutdown()
+	shutdown()
 	return nil
 }
 

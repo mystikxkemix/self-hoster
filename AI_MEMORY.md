@@ -7,6 +7,8 @@
 - Code comes from git repos cloned and built inside the container (Node 24 + Go toolchains bundled).
 - Two project types: `service` (spawned process) and `static` (website: build folder served by the Go binary itself, optional SPA fallback).
 - Admin web app is React + Vite + TS in `web/`, built into `internal/api/ui/dist` and embedded with `//go:embed ui`; `ui/placeholder.html` is served when not built.
+- Deploy on push = polling, decided 2026-11-07 (no webhook, no self-hosted runner): `internal/autodeploy` runs `git ls-remote` per enabled+autoDeploy project every SELFHOSTER_POLL_INTERVAL (1m). Mike's repos are private, under his personal account (madmike75), so a GitHub runner would have to be registered per repo.
+- Failed builds are not retried per commit (`lastTried`, in memory); check errors are logged once per distinct error.
 - Development happens in the dev container (`.devcontainer/`); toolchain versions must match the Dockerfile.
 
 ## Conventions / gotchas
@@ -19,6 +21,9 @@
 - Frontend fetches build absolute URLs from `location.origin`: relative fetch throws when the page is opened as http://user:pass@host.
 - `docker-outside-of-docker` devcontainer feature fails to install on the trixie base image; not used.
 - `pkill -f <pattern>` inside `bash -c '...'` kills its own shell when the pattern is in the command string; use a script file.
-- `GET /` is a catch-all: unknown paths (even under /api) hit the UI handler. With the built app they 404, with the placeholder they return 200. Tests must not depend on the UI being built (CI runs Go tests without it).
+- `GET /` is the UI catch-all; `<METHOD> /api/` routes (one per method) return a JSON 404. A method-less "/api/" pattern panics: it conflicts with "GET /" in Go's ServeMux.
+- Tests must not depend on the UI being built (CI runs Go tests without it). Shared git test helpers live in `internal/testutil`.
+- Git output can contain the repo URL (with a token): pass it through `redact` before surfacing it.
+- GitHub repo: github.com/madmike75/self-hoster (private), CI = .github/workflows/ci.yml.
 - CI (.github/workflows/ci.yml) pins Go 1.27 / Node 24: keep in sync with the Dockerfile and dev container.
 - zsh in this environment does not word-split `$VAR` in commands: use functions for curl helpers in tests.
