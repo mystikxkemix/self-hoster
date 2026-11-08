@@ -15,6 +15,7 @@
 - The poller re-reads its interval every second (dynamic from settings). Projects have an optional public `url` used by the UI's Open button; otherwise http://<linkHost or page host>:<port>.
 - UI layout: the page never scrolls on desktop; .project-list and .main scroll independently (min-height: 0 on flex/grid children). Below 760px it falls back to a normal scrolling page.
 - Browser UI checks: playwright-core (in the scratchpad, not the repo) driving the host Chrome with channel "chrome" and httpCredentials.
+- ZimaOS: root filesystem is read-only (no /root/.docker), the user (kemix, HOME=/DATA) is not in the docker group. Private GHCR pulls work with `sudo docker --config /DATA/.docker pull ghcr.io/mystikxkemix/self-hoster:latest` after a user-level `docker login ghcr.io` (classic token, read:packages). Verified 2026-11-08.
 - Development happens in the dev container (`.devcontainer/`); toolchain versions must match the Dockerfile.
 
 ## Conventions / gotchas
