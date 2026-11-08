@@ -112,6 +112,19 @@ export function ProjectForm({ initial, submitLabel, onSubmit, onCancel }: Props)
               onChange={(e) => set('branch', e.target.value)}
             />
           </label>
+          <label className="full">
+            Public URL (optional)
+            <input
+              className="mono"
+              type="url"
+              value={spec.url ?? ''}
+              placeholder="https://budget.example.com"
+              onChange={(e) => set('url', e.target.value)}
+            />
+            <span className="hint">
+              Where your nginx serves it. Used by the Open button; empty opens http://host:port.
+            </span>
+          </label>
           <label className="checkbox">
             <input type="checkbox" checked={!!spec.autoDeploy} onChange={(e) => set('autoDeploy', e.target.checked)} />
             Auto-deploy new commits (checked every minute)

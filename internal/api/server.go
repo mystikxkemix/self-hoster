@@ -2,7 +2,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -10,6 +9,7 @@ import (
 	"log"
 	"net/http"
 
+	"selfhoster/internal/settings"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
 )
@@ -30,16 +30,30 @@ type projectView struct {
 	Status  supervisor.Status `json:"status"`
 }
 
+// Info describes the deployment, shown read-only on the settings page.
+type Info struct {
+	DataDir string `json:"dataDir"`
+	AppsDir string `json:"appsDir"`
+	// Ports is the allowed project port range ("" = any).
+	Ports string `json:"ports"`
+}
+
+// settingsView is the settings page payload: editable settings plus read-only info.
+type settingsView struct {
+	settings.View
+	Info Info `json:"info"`
+}
+
 type server struct {
 	store    *store.Store
 	sup      *supervisor.Supervisor
-	user     string
-	password string
+	settings *settings.Manager
+	info     Info
 }
 
-// New returns the admin HTTP handler, protected by basic auth.
-func New(st *store.Store, sup *supervisor.Supervisor, user, password string) http.Handler {
-	s := &server{store: st, sup: sup, user: user, password: password}
+// New returns the admin HTTP handler, protected by basic auth against the settings.
+func New(st *store.Store, sup *supervisor.Supervisor, set *settings.Manager, info Info) http.Handler {
+	s := &server{store: st, sup: sup, settings: set, info: info}
 	mux := http.NewServeMux()
 	mux.Handle("GET /", uiHandler())
 	mux.HandleFunc("GET /api/projects", s.listProjects)
@@ -52,6 +66,9 @@ func New(st *store.Store, sup *supervisor.Supervisor, user, password string) htt
 	mux.HandleFunc("POST /api/projects/{name}/stop", s.stopProject)
 	mux.HandleFunc("POST /api/projects/{name}/restart", s.restartProject)
 	mux.HandleFunc("GET /api/projects/{name}/logs", s.projectLogs)
+	mux.HandleFunc("GET /api/settings", s.getSettings)
+	mux.HandleFunc("PUT /api/settings", s.updateSettings)
+	mux.HandleFunc("POST /api/settings/password", s.changePassword)
 	// Any other /api path (or a wrong method on an action) is an API error, not a UI page.
 	// Registered per method: a method-less "/api/" would conflict with "GET /".
 	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
@@ -80,9 +97,7 @@ func uiHandler() http.Handler {
 func (s *server) basicAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, password, ok := r.BasicAuth()
-		userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.user)) == 1
-		passwordOK := subtle.ConstantTimeCompare([]byte(password), []byte(s.password)) == 1
-		if !ok || !userOK || !passwordOK {
+		if !ok || !s.settings.Authenticate(user, password) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="self-hoster"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -222,6 +237,45 @@ func (s *server) projectLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.sup.Logs(p.Name))
+}
+
+func (s *server) getSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, settingsView{View: s.settings.View(), Info: s.info})
+}
+
+// updateSettings saves the editable settings. Changing the username makes the browser
+// ask for credentials again on the next request.
+func (s *server) updateSettings(w http.ResponseWriter, r *http.Request) {
+	var u settings.Update
+	if !decode(w, r, &u) {
+		return
+	}
+	if err := s.settings.Apply(u); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, settingsView{View: s.settings.View(), Info: s.info})
+}
+
+type passwordChange struct {
+	Current string `json:"current"`
+	New     string `json:"new"`
+}
+
+func (s *server) changePassword(w http.ResponseWriter, r *http.Request) {
+	var body passwordChange
+	if !decode(w, r, &body) {
+		return
+	}
+	if err := s.settings.ChangePassword(body.Current, body.New); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, settings.ErrWrongPassword) {
+			status = http.StatusForbidden
+		}
+		writeError(w, status, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // setEnabled persists whether the project should run, so the choice survives container restarts.

@@ -19,6 +19,7 @@ import (
 
 	"selfhoster/internal/api"
 	"selfhoster/internal/autodeploy"
+	"selfhoster/internal/settings"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
 )
@@ -35,9 +36,6 @@ func run() error {
 	addr := envOr("SELFHOSTER_ADDR", ":8080")
 	user := envOr("SELFHOSTER_ADMIN_USER", "admin")
 	password := os.Getenv("SELFHOSTER_ADMIN_PASSWORD")
-	if password == "" {
-		return errors.New("SELFHOSTER_ADMIN_PASSWORD must be set")
-	}
 
 	pollInterval, err := time.ParseDuration(envOr("SELFHOSTER_POLL_INTERVAL", "1m"))
 	if err != nil {
@@ -57,12 +55,25 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// Settings saved from the admin UI live next to the projects, on the data volume.
+	// The env vars above are their defaults.
+	set, err := settings.Open(filepath.Join(dataDir, "settings.json"), settings.Defaults{
+		AdminUser: user, AdminPassword: password, PollInterval: pollInterval,
+	})
+	if err != nil {
+		return err
+	}
+	if password == "" && !set.HasStoredPassword() {
+		return errors.New("SELFHOSTER_ADMIN_PASSWORD must be set (until a password is saved from the settings page)")
+	}
 	sup := supervisor.New(dataDir, appsDir)
 	restore(st, sup)
 
 	srv := &http.Server{
-		Addr:              addr,
-		Handler:           api.New(st, sup, user, password),
+		Addr: addr,
+		Handler: api.New(st, sup, set, api.Info{
+			DataDir: dataDir, AppsDir: appsDir, Ports: os.Getenv("SELFHOSTER_PORTS"),
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	serveErr := make(chan error, 1)
@@ -79,12 +90,8 @@ func run() error {
 	pollDone := make(chan struct{})
 	go func() {
 		defer close(pollDone)
-		if pollInterval <= 0 {
-			log.Print("auto-deploy polling disabled")
-			return
-		}
-		log.Printf("auto-deploy: checking remotes every %s", pollInterval)
-		autodeploy.New(st, sup, pollInterval).Run(pollCtx)
+		log.Printf("auto-deploy: checking remotes every %s (0 = disabled, editable in settings)", set.View().PollInterval)
+		autodeploy.New(st, sup, set.PollInterval).Run(pollCtx)
 	}()
 	shutdown := func() {
 		stopPolling()

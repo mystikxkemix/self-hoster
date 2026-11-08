@@ -1,15 +1,18 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ProjectDetail } from './components/ProjectDetail';
 import { ProjectForm } from './components/ProjectForm';
+import { SettingsPage } from './components/SettingsPage';
 import { StatusBadge } from './components/StatusBadge';
 import { api, errorMessage } from './lib/api';
-import type { Project, ProjectSpec } from './lib/types';
+import { projectUrl } from './lib/links';
+import type { Project, ProjectSpec, Settings } from './lib/types';
 import { usePolling } from './lib/usePolling';
 
-type View = { kind: 'project'; name: string } | { kind: 'create' } | { kind: 'none' };
+type View = { kind: 'project'; name: string } | { kind: 'create' } | { kind: 'settings' } | { kind: 'none' };
 
 export function App() {
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [view, setView] = useState<View>({ kind: 'none' });
 
@@ -27,21 +30,28 @@ export function App() {
 
   usePolling(refresh, 3000);
 
+  useEffect(() => {
+    api.settings().then(setSettings, (err) => setLoadError(errorMessage(err)));
+  }, []);
+
   const create = async (spec: ProjectSpec) => {
     const created = await api.create(spec);
     await refresh();
     setView({ kind: 'project', name: created.name });
   };
 
+  const linkHost = settings?.linkHost ?? '';
   const selected = view.kind === 'project' ? projects?.find((p) => p.name === view.name) : undefined;
 
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">self-hoster</div>
-        <button className="primary block" onClick={() => setView({ kind: 'create' })}>
-          + New project
-        </button>
+        <div className="sidebar-top">
+          <div className="brand">self-hoster</div>
+          <button className="primary block" onClick={() => setView({ kind: 'create' })}>
+            + New project
+          </button>
+        </div>
         <ul className="project-list">
           {projects?.map((p) => (
             <li key={p.name}>
@@ -55,10 +65,28 @@ export function App() {
                   <span>:{p.port}</span>
                 </span>
               </button>
+              <a
+                className="open-link"
+                href={projectUrl(p, linkHost)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open ${projectUrl(p, linkHost)}`}
+                aria-label={`Open ${p.name} website`}
+              >
+                ↗
+              </a>
             </li>
           ))}
+          {projects?.length === 0 && <li className="hint">No projects yet.</li>}
         </ul>
-        {projects?.length === 0 && <p className="hint">No projects yet.</p>}
+        <div className="sidebar-bottom">
+          <button
+            className={`nav-item ${view.kind === 'settings' ? 'active' : ''}`}
+            onClick={() => setView({ kind: 'settings' })}
+          >
+            ⚙ Settings
+          </button>
+        </div>
       </aside>
 
       <main className="main">
@@ -71,10 +99,16 @@ export function App() {
             <ProjectForm submitLabel="Create project" onSubmit={create} onCancel={() => setView({ kind: 'none' })} />
           </div>
         )}
+        {view.kind === 'settings' && settings && <SettingsPage settings={settings} onSaved={setSettings} />}
         {selected && (
-          <ProjectDetail project={selected} onChanged={refresh} onDeleted={() => setView({ kind: 'none' })} />
+          <ProjectDetail
+            project={selected}
+            linkHost={linkHost}
+            onChanged={refresh}
+            onDeleted={() => setView({ kind: 'none' })}
+          />
         )}
-        {view.kind !== 'create' && !selected && projects && (
+        {view.kind !== 'create' && view.kind !== 'settings' && !selected && projects && (
           <div className="empty">
             <h2>Host your projects</h2>
             <p>Register a git repository: an API or server (Node, Go…) or a website build folder.</p>

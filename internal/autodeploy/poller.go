@@ -11,14 +11,20 @@ import (
 	"selfhoster/internal/supervisor"
 )
 
-// checkTimeout bounds a single git ls-remote call.
-const checkTimeout = 30 * time.Second
+const (
+	// checkTimeout bounds a single git ls-remote call.
+	checkTimeout = 30 * time.Second
+	// tick is how often Run re-reads the interval, so a change from the settings page
+	// (or enabling/disabling) applies within seconds, without a restart.
+	tick = time.Second
+)
 
 // Poller periodically compares each auto-deploy project's remote branch with its checkout.
 type Poller struct {
-	store    *store.Store
-	sup      *supervisor.Supervisor
-	interval time.Duration
+	store *store.Store
+	sup   *supervisor.Supervisor
+	// interval returns the current check interval; 0 disables checks.
+	interval func() time.Duration
 
 	// lastTried is the remote commit last deployed per project. A failed build is not
 	// retried on every tick: the poller waits for the next commit.
@@ -28,17 +34,22 @@ type Poller struct {
 	lastError map[string]string
 }
 
-// New creates a poller that checks every interval.
-func New(st *store.Store, sup *supervisor.Supervisor, interval time.Duration) *Poller {
+// New creates a poller that checks every interval(); 0 pauses it.
+func New(st *store.Store, sup *supervisor.Supervisor, interval func() time.Duration) *Poller {
 	return &Poller{store: st, sup: sup, interval: interval, lastTried: map[string]string{}, lastError: map[string]string{}}
 }
 
-// Run checks immediately, then on every interval until ctx is cancelled.
+// Run checks immediately, then whenever the current interval has elapsed since the
+// last check, until ctx is cancelled.
 func (p *Poller) Run(ctx context.Context) {
-	ticker := time.NewTicker(p.interval)
+	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
+	var last time.Time
 	for {
-		p.CheckOnce(ctx)
+		if interval := p.interval(); interval > 0 && time.Since(last) >= interval {
+			p.CheckOnce(ctx)
+			last = time.Now()
+		}
 		select {
 		case <-ctx.Done():
 			return
