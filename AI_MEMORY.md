@@ -9,6 +9,8 @@
 - Admin web app is React + Vite + TS in `web/`, built into `internal/api/ui/dist` and embedded with `//go:embed ui`; `ui/placeholder.html` is served when not built.
 - Deploy on push = polling, decided 2026-11-07 (no webhook, no self-hosted runner): `internal/autodeploy` runs `git ls-remote` per enabled+autoDeploy project every SELFHOSTER_POLL_INTERVAL (1m). Mike's repos are private, under his personal account (madmike75), so a GitHub runner would have to be registered per repo.
 - Failed builds are not retried per commit (`lastTried`, in memory); check errors are logged once per distinct error.
+- Each project gets a persistent folder SELFHOSTER_APPS_DIR/<name> (default /apps, Mike's choice), passed as DATA_DIR to build and run; user env may override it. Never deleted, not even by project delete. Checkouts under /data/projects are disposable.
+- budget-app (github.com/mystikxkemix/budget-app) is a single Next.js 15 + SQLite app, NOT Nx. Its `next build` races on SQLite (module-level WAL pragma in lib/db/client.ts, many build workers): run `node scripts/migrate.mjs` before `npm run build`.
 - Development happens in the dev container (`.devcontainer/`); toolchain versions must match the Dockerfile.
 
 ## Conventions / gotchas

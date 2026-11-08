@@ -8,6 +8,7 @@
   },
   "containerEnv": {
     "SELFHOSTER_DATA_DIR": "${containerWorkspaceFolder}/data",
+    "SELFHOSTER_APPS_DIR": "${containerWorkspaceFolder}/apps",
     "SELFHOSTER_ADMIN_PASSWORD": "dev",
     "SELFHOSTER_PORTS": "4000-4019"
   },
