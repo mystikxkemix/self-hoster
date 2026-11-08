@@ -36,10 +36,12 @@ ENV PATH=/usr/local/go/bin:/data/cache/go/bin:$PATH \
     GOPATH=/data/cache/go \
     GOCACHE=/data/cache/go-build \
     npm_config_cache=/data/cache/npm \
-    SELFHOSTER_DATA_DIR=/data
+    SELFHOSTER_DATA_DIR=/data \
+    SELFHOSTER_APPS_DIR=/apps
 
 COPY --from=build /out/self-hoster /usr/local/bin/self-hoster
-VOLUME /data
+# /data: self-hoster state, checkouts, caches. /apps: each project's persistent data (DATA_DIR).
+VOLUME /data /apps
 EXPOSE 8080
 # tini reaps orphaned grandchildren and forwards signals to the supervisor.
 ENTRYPOINT ["tini", "--", "self-hoster"]

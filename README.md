@@ -19,6 +19,7 @@ ZimaOS
    ├─ :4001 → my-go-svc   (service: ./bin/server)
    └─ :4002 → my-site     (website: serves dist/, no process)
    /data: config.json, project checkouts, build caches
+   /apps: one persistent folder per project (/apps/my-api = its DATA_DIR)
 ```
 
 ## Install on ZimaOS
@@ -43,6 +44,10 @@ UI can run arbitrary commands.
 | Folder to serve | n/a | n/a | `dist` (+ "Single-page app" for client routing) |
 
 - **Services must listen on `$PORT`.** It is always set to the project's port.
+- **Persistent data goes in `$DATA_DIR`** (`/apps/<name>`): SQLite files, uploads…
+  The checkout is replaced on every deploy and deleted with the project; `/apps/<name>`
+  is kept in both cases. Example: `DATABASE_PATH=/apps/budget-app/budget.db`.
+  Back up the `apps/` folder.
 - **Websites** are served by self-hoster itself (no extra process). Env vars are
   available at build time, e.g. `VITE_API_URL` for Vite.
 - **Ports** must be in the published range (`4000-4019` by default). To widen it,
@@ -99,6 +104,7 @@ the original ZimaBoard (Celeron N3350/N3450) has none and is stuck on `mongo:4.4
 | `SELFHOSTER_PORTS` | (any) | Allowed project port range, e.g. `4000-4019` |
 | `SELFHOSTER_ADDR` | `:8080` | Admin UI listen address |
 | `SELFHOSTER_DATA_DIR` | `/data` | State, checkouts and caches |
+| `SELFHOSTER_APPS_DIR` | `/apps` | Parent of each project's persistent `DATA_DIR` |
 | `SELFHOSTER_POLL_INTERVAL` | `1m` | Auto-deploy check interval (Go duration, `0` disables) |
 
 `SELFHOSTER_*` variables are never passed to projects.

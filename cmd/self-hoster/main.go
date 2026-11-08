@@ -31,6 +31,7 @@ func main() {
 
 func run() error {
 	dataDir := envOr("SELFHOSTER_DATA_DIR", "/data")
+	appsDir := envOr("SELFHOSTER_APPS_DIR", "/apps")
 	addr := envOr("SELFHOSTER_ADDR", ":8080")
 	user := envOr("SELFHOSTER_ADMIN_USER", "admin")
 	password := os.Getenv("SELFHOSTER_ADMIN_PASSWORD")
@@ -47,14 +48,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(dataDir, "projects"), 0o755); err != nil {
-		return err
+	for _, dir := range []string{filepath.Join(dataDir, "projects"), appsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
 	}
 	st, err := store.Open(filepath.Join(dataDir, "config.json"), opts)
 	if err != nil {
 		return err
 	}
-	sup := supervisor.New(dataDir)
+	sup := supervisor.New(dataDir, appsDir)
 	restore(st, sup)
 
 	srv := &http.Server{

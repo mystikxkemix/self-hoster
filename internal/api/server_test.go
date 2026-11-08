@@ -34,7 +34,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sup := supervisor.New(dataDir)
+	sup := supervisor.New(dataDir, filepath.Join(dataDir, "apps"))
 	srv := httptest.NewServer(New(st, sup, testUser, testPassword))
 	t.Cleanup(func() {
 		srv.Close()
@@ -210,6 +210,9 @@ func TestGetAndListProjects(t *testing.T) {
 
 	code, body = f.do("GET", "/api/projects/api", "")
 	expect(t, code, body, http.StatusOK, `"state":"stopped"`)
+	if view := decodeJSON[map[string]any](t, body); view["dataDir"] != f.sup.AppDir("api") {
+		t.Fatalf("dataDir = %v, want %s", view["dataDir"], f.sup.AppDir("api"))
+	}
 
 	code, body = f.do("GET", "/api/projects/missing", "")
 	expect(t, code, body, http.StatusNotFound, "not found")

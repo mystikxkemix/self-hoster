@@ -32,6 +32,8 @@ export interface ProjectSpec {
 
 export interface Project extends ProjectSpec {
   enabled: boolean;
+  /** Persistent folder for the project's data (SQLite files, uploads…), passed as DATA_DIR. Kept on delete. */
+  dataDir: string;
   status: ProjectStatus;
 }
 

@@ -27,7 +27,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sup := supervisor.New(dataDir)
+	sup := supervisor.New(dataDir, filepath.Join(dataDir, "apps"))
 	t.Cleanup(sup.Shutdown)
 	return &fixture{
 		t:      t,

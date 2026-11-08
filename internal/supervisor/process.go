@@ -27,11 +27,16 @@ const (
 	maxBackoff    = time.Minute
 	// internalEnvPrefix marks self-hoster's own settings, which are never passed to projects.
 	internalEnvPrefix = "SELFHOSTER_"
+	// DataDirEnv is the env var holding the project's persistent data folder.
+	DataDirEnv = "DATA_DIR"
 )
 
 // process manages the lifecycle of a single project.
 type process struct {
-	dir      string
+	dir string
+	// appDir is the project's persistent data folder (<apps dir>/<name>). Unlike dir,
+	// it survives redeploys and project deletion.
+	appDir   string
 	logs     *logBuffer
 	shutdown *atomic.Bool
 
@@ -51,9 +56,10 @@ type process struct {
 	restartTimer *time.Timer
 }
 
-func newProcess(spec store.Project, dir string, shutdown *atomic.Bool) *process {
+func newProcess(spec store.Project, dir, appDir string, shutdown *atomic.Bool) *process {
 	return &process{
 		dir:      dir,
+		appDir:   appDir,
 		logs:     newLogBuffer(spec.Name, os.Stdout),
 		shutdown: shutdown,
 		spec:     spec,
@@ -109,13 +115,17 @@ func (p *process) deploy(ctx context.Context) {
 	defer cancel()
 	spec := p.getSpec()
 	p.logs.system("deploy started")
+	if err := os.MkdirAll(p.appDir, 0o755); err != nil {
+		p.failDeploy(fmt.Errorf("data folder: %w", err))
+		return
+	}
 	if err := p.syncRepo(ctx, spec); err != nil {
 		p.failDeploy(fmt.Errorf("git: %w", err))
 		return
 	}
 	if strings.TrimSpace(spec.BuildCmd) != "" {
 		p.logs.system("building: %s", spec.BuildCmd)
-		if err := p.run(ctx, p.dir, environment(spec), "sh", "-c", spec.BuildCmd); err != nil {
+		if err := p.run(ctx, p.dir, p.environment(spec), "sh", "-c", spec.BuildCmd); err != nil {
 			p.failDeploy(fmt.Errorf("build: %w", err))
 			return
 		}
@@ -202,7 +212,11 @@ func (p *process) startLocked() error {
 	}
 	cmd := exec.Command("sh", "-c", spec.StartCmd)
 	cmd.Dir = p.dir
-	cmd.Env = environment(spec)
+	if err := os.MkdirAll(p.appDir, 0o755); err != nil {
+		p.setError(err)
+		return err
+	}
+	cmd.Env = p.environment(spec)
 	cmd.Stdout = p.logs
 	cmd.Stderr = p.logs
 	// Own process group, so stopping also stops children (npm -> node, etc.).
@@ -312,9 +326,10 @@ func (p *process) currentCommit() string {
 }
 
 // environment builds a project's env: the container env (minus self-hoster settings),
-// then the project's variables, then PORT. exec keeps the last value of duplicate keys.
-func environment(spec store.Project) []string {
-	env := baseEnvironment()
+// DATA_DIR, the project's variables (which may override DATA_DIR), then PORT.
+// exec keeps the last value of duplicate keys.
+func (p *process) environment(spec store.Project) []string {
+	env := append(baseEnvironment(), DataDirEnv+"="+p.appDir)
 	for key, value := range spec.Env {
 		env = append(env, key+"="+value)
 	}

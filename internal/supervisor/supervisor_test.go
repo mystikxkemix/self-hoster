@@ -21,7 +21,7 @@ import (
 // newSupervisor returns a supervisor whose projects are all stopped at the end of the test.
 func newSupervisor(t *testing.T) *Supervisor {
 	t.Helper()
-	s := New(t.TempDir())
+	s := New(t.TempDir(), t.TempDir())
 	t.Cleanup(s.Shutdown)
 	return s
 }
@@ -120,7 +120,7 @@ func TestEnvironmentIsInjectedAndSelfHosterSettingsAreHidden(t *testing.T) {
 			t.Fatal(err)
 		}
 		env := string(data)
-		for _, want := range []string{"GREETING=hello", "MONGO_URL=mongodb://db/app", "PORT=4321", "PATH="} {
+		for _, want := range []string{"GREETING=hello", "MONGO_URL=mongodb://db/app", "PORT=4321", "PATH=", "DATA_DIR=" + s.AppDir("env")} {
 			if !strings.Contains(env, want) {
 				t.Errorf("%s: missing %q", file, want)
 			}
@@ -346,4 +346,52 @@ func TestNextBackoff(t *testing.T) {
 			t.Errorf("nextBackoff(%s) = %s, want %s", current, got, want[i])
 		}
 	}
+}
+
+func TestDataDirIsPersistentAndKeptOnRemove(t *testing.T) {
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
+	s := newSupervisor(t)
+	// The app writes into its data folder on every start, like a SQLite database would.
+	start := `echo run >> "$DATA_DIR/runs.log"; exec sleep 60`
+	spec := service("keep", repo, `echo build >> "$DATA_DIR/runs.log"`, start)
+
+	for range 2 {
+		if err := s.Deploy(spec); err != nil {
+			t.Fatal(err)
+		}
+		waitDeployed(t, s, "keep")
+	}
+	logFile := filepath.Join(s.AppDir("keep"), "runs.log")
+	waitFor(t, "second start to write", func() bool {
+		data, _ := os.ReadFile(logFile)
+		return strings.Count(string(data), "run") == 2
+	})
+
+	if err := s.Remove("keep"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("data folder removed with the project: %v", err)
+	}
+	if got := string(data); got != "build\nrun\nbuild\nrun\n" {
+		t.Fatalf("runs.log = %q, want both deploys recorded", got)
+	}
+}
+
+func TestDataDirCanBeOverridden(t *testing.T) {
+	repo := testutil.NewRepo(t, map[string]string{"README": "x"})
+	s := newSupervisor(t)
+	custom := t.TempDir()
+	spec := service("custom", repo, "", `echo "$DATA_DIR" > dir.txt; exec sleep 60`)
+	spec.Env = map[string]string{"DATA_DIR": custom}
+	if err := s.Deploy(spec); err != nil {
+		t.Fatal(err)
+	}
+	waitDeployed(t, s, "custom")
+	out := filepath.Join(s.projectDir("custom"), "dir.txt")
+	waitFor(t, "dir.txt", func() bool {
+		data, _ := os.ReadFile(out)
+		return strings.TrimSpace(string(data)) == custom
+	})
 }

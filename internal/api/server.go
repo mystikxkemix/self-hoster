@@ -25,7 +25,9 @@ const maxBodyBytes = 1 << 20
 // projectView is a project definition together with its runtime status.
 type projectView struct {
 	store.Project
-	Status supervisor.Status `json:"status"`
+	// DataDir is the project's persistent folder, passed to it as DATA_DIR.
+	DataDir string            `json:"dataDir"`
+	Status  supervisor.Status `json:"status"`
 }
 
 type server struct {
@@ -249,7 +251,7 @@ func (s *server) load(w http.ResponseWriter, r *http.Request) (store.Project, bo
 }
 
 func (s *server) view(p store.Project) projectView {
-	return projectView{Project: p, Status: s.sup.Status(p.Name)}
+	return projectView{Project: p, DataDir: s.sup.AppDir(p.Name), Status: s.sup.Status(p.Name)}
 }
 
 func decode(w http.ResponseWriter, r *http.Request, dst any) bool {
