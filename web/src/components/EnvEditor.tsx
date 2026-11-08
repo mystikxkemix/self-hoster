@@ -65,7 +65,9 @@ export function EnvEditor({ rows, onChange }: Props) {
   return (
     <div className="env">
       <div className="env-toolbar">
-        <span className="hint">PORT is set automatically from the project port.</span>
+        <span className="hint">
+          PORT and DATA_DIR (persistent folder, kept across deploys) are set automatically.
+        </span>
         <button type="button" className="link" onClick={() => setRevealed(!revealed)}>
           {revealed ? 'Hide values' : 'Show values'}
         </button>

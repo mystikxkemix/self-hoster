@@ -39,7 +39,12 @@ export function ProjectDetail({ project, onChanged, onDeleted }: Props) {
   };
 
   const remove = () => {
-    if (!confirm(`Delete ${project.name}? Its checkout is removed; the repository is untouched.`)) return;
+    if (
+      !confirm(
+        `Delete ${project.name}? Its checkout is removed. Its data folder (${project.dataDir}) and the repository are kept.`,
+      )
+    )
+      return;
     run('delete', async () => {
       await api.remove(project.name);
       onDeleted();
@@ -68,6 +73,9 @@ export function ProjectDetail({ project, onChanged, onDeleted }: Props) {
             <span>commit <code>{status.commit ?? '-'}</code></span>
             <span>up {uptime(status.startedAt)}</span>
             {status.restarts > 0 && <span>{status.restarts} restarts</span>}
+            <span>
+              data <code>{project.dataDir}</code>
+            </span>
           </div>
         </div>
         <div className="actions">

@@ -1,5 +1,6 @@
 # Runtime state (projects checkouts, config with env vars, caches)
 data/
+apps/
 .env
 /self-hoster
 

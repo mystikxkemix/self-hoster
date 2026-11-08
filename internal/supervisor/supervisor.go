@@ -45,14 +45,21 @@ type Status struct {
 // Supervisor owns one process per registered project.
 type Supervisor struct {
 	dataDir  string
+	appsDir  string
 	mu       sync.Mutex
 	procs    map[string]*process
 	shutdown atomic.Bool
 }
 
-// New creates a supervisor that keeps project checkouts under dataDir/projects.
-func New(dataDir string) *Supervisor {
-	return &Supervisor{dataDir: dataDir, procs: map[string]*process{}}
+// New creates a supervisor that keeps project checkouts under dataDir/projects and
+// gives each project a persistent data folder under appsDir.
+func New(dataDir, appsDir string) *Supervisor {
+	return &Supervisor{dataDir: dataDir, appsDir: appsDir, procs: map[string]*process{}}
+}
+
+// AppDir returns the project's persistent data folder, passed to it as DATA_DIR.
+func (s *Supervisor) AppDir(name string) string {
+	return filepath.Join(s.appsDir, name)
 }
 
 // Configure registers or updates a project definition without starting it.
@@ -120,7 +127,7 @@ func (s *Supervisor) Stop(name string) {
 	p.stopLocked()
 }
 
-// Remove stops the project and deletes its checkout.
+// Remove stops the project and deletes its checkout. Its data folder is kept.
 func (s *Supervisor) Remove(name string) error {
 	p := s.lookup(name)
 	if p != nil {
@@ -193,7 +200,7 @@ func (s *Supervisor) proc(spec store.Project) *process {
 	defer s.mu.Unlock()
 	p, ok := s.procs[spec.Name]
 	if !ok {
-		p = newProcess(spec, s.projectDir(spec.Name), &s.shutdown)
+		p = newProcess(spec, s.projectDir(spec.Name), s.AppDir(spec.Name), &s.shutdown)
 		s.procs[spec.Name] = p
 	}
 	return p

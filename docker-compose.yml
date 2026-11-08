@@ -14,6 +14,7 @@ services:
       - "8080:8080"             # admin UI (keep it LAN-only)
       - "4000-4019:4000-4019"   # one port per project, routed by your nginx
     volumes:
-      - ./data:/data
+      - ./data:/data            # self-hoster state, checkouts, build caches
+      - ./apps:/apps            # persistent data of each project (/apps/<name> = its DATA_DIR)
       # Private repos over SSH: mount a deploy key (read-only).
       # - ./ssh:/root/.ssh:ro

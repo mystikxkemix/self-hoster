@@ -18,7 +18,7 @@ func TestRemoteCommit(t *testing.T) {
 	featureSHA := testutil.Commit(t, repo, "feature")
 	testutil.Git(t, repo, "checkout", "-q", defaultBranch)
 
-	s := New(t.TempDir())
+	s := New(t.TempDir(), t.TempDir())
 	tests := []struct {
 		branch string
 		want   string
@@ -44,7 +44,7 @@ func TestRemoteCommit(t *testing.T) {
 }
 
 func TestRemoteCommitErrorDoesNotLeakToken(t *testing.T) {
-	s := New(t.TempDir())
+	s := New(t.TempDir(), t.TempDir())
 	// A token in an https URL, pointing at a closed local port: fails fast, no network needed.
 	repo := "https://ghp_secretToken123@127.0.0.1:1/me/repo.git"
 	_, err := s.RemoteCommit(context.Background(), store.Project{Repo: repo})
