@@ -33,6 +33,19 @@ docker compose up -d --build
 Open `http://<zima-ip>:8080` (user `admin`). Keep this port on your LAN: the admin
 UI can run arbitrary commands.
 
+### Settings page
+
+The admin UI has a **Settings** page (bottom of the sidebar). Changes are saved in
+`data/settings.json` (the `/data` volume) and take precedence over the env vars below,
+which act as defaults:
+
+- **Admin username and password.** Once changed there, the password is stored hashed
+  (PBKDF2) and `SELFHOSTER_ADMIN_PASSWORD` is no longer needed. Forgot it? Remove
+  `"passwordHash"` from `data/settings.json` and restart: the env password applies again.
+- **Auto-deploy check interval** (applies within a second, no restart; `0` disables).
+- **Host for project links**: the **Open site** button opens a project's *Public URL*
+  (set per project, e.g. the domain your nginx serves) or `http://<this host>:<port>`.
+
 > Building on a Mac for the Zima box? ZimaOS is x86: `docker buildx build --platform linux/amd64 -t self-hoster .`
 
 ## Register a project
@@ -99,13 +112,13 @@ the original ZimaBoard (Celeron N3350/N3450) has none and is stuck on `mongo:4.4
 
 | Variable | Default | |
 |---|---|---|
-| `SELFHOSTER_ADMIN_PASSWORD` | (required) | Admin UI password |
-| `SELFHOSTER_ADMIN_USER` | `admin` | Admin UI user |
+| `SELFHOSTER_ADMIN_PASSWORD` | (required until set in Settings) | Admin UI password |
+| `SELFHOSTER_ADMIN_USER` | `admin` | Admin UI user (default; editable in Settings) |
 | `SELFHOSTER_PORTS` | (any) | Allowed project port range, e.g. `4000-4019` |
 | `SELFHOSTER_ADDR` | `:8080` | Admin UI listen address |
 | `SELFHOSTER_DATA_DIR` | `/data` | State, checkouts and caches |
 | `SELFHOSTER_APPS_DIR` | `/apps` | Parent of each project's persistent `DATA_DIR` |
-| `SELFHOSTER_POLL_INTERVAL` | `1m` | Auto-deploy check interval (Go duration, `0` disables) |
+| `SELFHOSTER_POLL_INTERVAL` | `1m` | Auto-deploy check interval (default; editable in Settings) |
 
 `SELFHOSTER_*` variables are never passed to projects.
 

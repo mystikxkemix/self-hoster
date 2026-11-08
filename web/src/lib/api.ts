@@ -1,6 +1,6 @@
-import { type Project, type ProjectAction, type ProjectSpec, toSpec } from './types';
+import { type Project, type ProjectAction, type ProjectSpec, type Settings, type SettingsUpdate, toSpec } from './types';
 
-const BASE = '/api/projects';
+const BASE = '/api';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   // Absolute URL from origin: a relative fetch throws when the page was opened as http://user:pass@host.
@@ -15,15 +15,19 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
-const path = (name: string) => `/${encodeURIComponent(name)}`;
+const path = (name: string) => `/projects/${encodeURIComponent(name)}`;
 
 export const api = {
-  list: () => request<Project[]>('GET', ''),
-  create: (spec: ProjectSpec) => request<Project>('POST', '', toSpec(spec)),
+  list: () => request<Project[]>('GET', '/projects'),
+  create: (spec: ProjectSpec) => request<Project>('POST', '/projects', toSpec(spec)),
   update: (name: string, spec: ProjectSpec) => request<Project>('PUT', path(name), toSpec(spec)),
   remove: (name: string) => request<void>('DELETE', path(name)),
   action: (name: string, action: ProjectAction) => request<Project>('POST', `${path(name)}/${action}`),
   logs: (name: string) => request<string[]>('GET', `${path(name)}/logs`),
+  settings: () => request<Settings>('GET', '/settings'),
+  updateSettings: (update: SettingsUpdate) => request<Settings>('PUT', '/settings', update),
+  changePassword: (current: string, next: string) =>
+    request<void>('POST', '/settings/password', { current, new: next }),
 };
 
 export function errorMessage(err: unknown): string {

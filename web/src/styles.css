@@ -43,10 +43,15 @@ h2 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
 h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 12px; }
 
 /* Layout */
-.app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
-.sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+/* The page itself never scrolls: the sidebar's project list and the main pane scroll independently. */
+.app { display: grid; grid-template-columns: 260px 1fr; height: 100vh; height: 100dvh; overflow: hidden; }
+.sidebar { background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.sidebar-top { padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+.sidebar-bottom { padding: 8px 16px 16px; border-top: 1px solid var(--line); }
 .brand { font-weight: 700; font-size: 16px; }
-.main { padding: 24px; min-width: 0; }
+.main { padding: 24px; min-width: 0; min-height: 0; overflow-y: auto; }
+.nav-item { width: 100%; text-align: left; border: none; background: none; padding: 8px 10px; color: var(--muted); }
+.nav-item:hover, .nav-item.active { background: var(--surface-2); color: var(--text); }
 
 /* Buttons */
 button { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
@@ -57,11 +62,19 @@ button.danger { color: var(--bad); }
 button.link { border: none; background: none; color: var(--accent); padding: 4px 0; }
 button.icon { padding: 4px 10px; font-size: 16px; line-height: 1; }
 button.block { width: 100%; }
+/* Links styled as buttons (e.g. "Open site"). */
+a.button { display: inline-flex; align-items: center; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; text-decoration: none; }
+a.button:hover { border-color: var(--muted); }
 
 /* Project list */
-.project-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.project-list button { width: 100%; text-align: left; border: none; background: none; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
-.project-list button:hover, .project-list button.active { background: var(--surface-2); }
+.project-list { list-style: none; margin: 0; padding: 0 16px 12px; display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; }
+.project-list li { display: flex; align-items: stretch; border-radius: 6px; }
+.project-list li:hover, .project-list li:has(button.active) { background: var(--surface-2); }
+.project-list button { flex: 1; min-width: 0; text-align: left; border: none; background: none; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.project-list .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-link { display: flex; align-items: center; padding: 0 10px; color: var(--muted); text-decoration: none; border-radius: 6px; }
+.open-link:hover { color: var(--accent); }
+.project-list li.hint { padding: 8px 10px; }
 .project-list .name { font-weight: 600; }
 .project-list .sub { display: flex; gap: 8px; color: var(--muted); font-size: 12px; }
 
@@ -104,6 +117,15 @@ textarea { font-family: var(--mono); font-size: 13px; resize: vertical; }
 .segmented button.active { border-color: var(--accent); outline: 1px solid var(--accent); }
 .form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .error { color: var(--bad); font-size: 13px; }
+.success { color: var(--ok); font-size: 13px; }
+.section-hint { margin-bottom: 12px; }
+
+/* Settings: read-only system info */
+.info { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.info dl { margin: 0 0 12px; display: flex; flex-direction: column; gap: 8px; }
+.info dl div { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.info dt { color: var(--muted); font-size: 13px; }
+.info dd { margin: 0; }
 .hint { color: var(--muted); font-size: 12px; margin: 0; }
 
 /* Env editor */
@@ -118,9 +140,11 @@ textarea { font-family: var(--mono); font-size: 13px; resize: vertical; }
 .empty p { color: var(--muted); margin: 0; }
 
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; }
+  /* Small screens: stacked, the whole page scrolls; the project list is capped. */
+  .app { grid-template-columns: 1fr; height: auto; overflow: visible; }
   .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
-  .main { padding: 16px; }
+  .project-list { max-height: 40vh; }
+  .main { padding: 16px; overflow: visible; }
   .grid, .segmented { grid-template-columns: 1fr; }
   .env-row { grid-template-columns: 1fr 1fr auto; }
 }

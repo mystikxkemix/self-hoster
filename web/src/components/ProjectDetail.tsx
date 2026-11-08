@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, errorMessage } from '../lib/api';
+import { projectUrl } from '../lib/links';
 import type { Project, ProjectAction, ProjectSpec } from '../lib/types';
 import { LogsView } from './LogsView';
 import { ProjectForm } from './ProjectForm';
@@ -9,11 +10,13 @@ type Tab = 'logs' | 'settings';
 
 interface Props {
   project: Project;
+  /** Host for projects without a public URL (settings). */
+  linkHost: string;
   onChanged: () => void;
   onDeleted: () => void;
 }
 
-export function ProjectDetail({ project, onChanged, onDeleted }: Props) {
+export function ProjectDetail({ project, linkHost, onChanged, onDeleted }: Props) {
   const [tab, setTab] = useState<Tab>('logs');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +73,11 @@ export function ProjectDetail({ project, onChanged, onDeleted }: Props) {
             <span>
               port <strong>{project.port}</strong>
             </span>
+            {project.url && (
+              <span>
+                url <code>{project.url}</code>
+              </span>
+            )}
             <span>commit <code>{status.commit ?? '-'}</code></span>
             <span>up {uptime(status.startedAt)}</span>
             {status.restarts > 0 && <span>{status.restarts} restarts</span>}
@@ -79,6 +87,9 @@ export function ProjectDetail({ project, onChanged, onDeleted }: Props) {
           </div>
         </div>
         <div className="actions">
+          <a className="button" href={projectUrl(project, linkHost)} target="_blank" rel="noopener noreferrer">
+            Open site ↗
+          </a>
           <button className="primary" disabled={!!busy || status.deploying} onClick={() => action('deploy')}>
             {status.deploying ? 'Deploying…' : 'Deploy'}
           </button>
