@@ -44,16 +44,19 @@ pass on `master`. The package is private:
        container_name: self-hoster
        restart: unless-stopped
        stop_grace_period: 30s
+       # The ZimaOS importer rejects port ranges ("Invalid ports: 4000-4019"), so the
+       # container uses the host network: admin and projects listen on the box directly,
+       # and projects reach host services (e.g. MongoDB) at localhost.
+       network_mode: host
        environment:
          SELFHOSTER_ADMIN_PASSWORD: change-me   # only until changed in Settings
-         SELFHOSTER_PORTS: "4000-4019"
-       ports:
-         - "8080:8080"             # admin UI (keep LAN-only)
-         - "4000-4019:4000-4019"   # projects, routed by your nginx
+         SELFHOSTER_ADDR: ":8090"               # admin UI (keep LAN-only)
+         SELFHOSTER_PORTS: "4000-4019"          # projects, routed by your nginx
        volumes:
          - /DATA/AppData/self-hoster/data:/data   # settings, project list, checkouts
          - /DATA/AppData/self-hoster/apps:/apps   # each project's DATA_DIR (back up)
    ```
+   Then open `http://<zima-ip>:8090`.
 3. Update later: pull again with the `--config` command above, then
    `sudo docker compose up -d` in the app folder (or restart the ZimaOS app).
 
