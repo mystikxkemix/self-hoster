@@ -27,9 +27,12 @@ ZimaOS
 CI publishes `ghcr.io/mystikxkemix/self-hoster:latest` (linux/amd64) after the tests
 pass on `master`. The package is private:
 
-1. Create a GitHub **classic** token with only `read:packages`, then on ZimaOS:
+1. Create a GitHub **classic** token with only `read:packages`, then on ZimaOS log in
+   as your user (ZimaOS's root filesystem is read-only, so root cannot store a login)
+   and pull with root pointing at your config:
    ```sh
-   read -s GHCR_TOKEN && echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u mystikxkemix --password-stdin; unset GHCR_TOKEN
+   read -s GHCR_TOKEN && echo "$GHCR_TOKEN" | docker login ghcr.io -u mystikxkemix --password-stdin; unset GHCR_TOKEN
+   sudo docker --config /DATA/.docker pull ghcr.io/mystikxkemix/self-hoster:latest
    ```
    (Your GitHub password does not work there: `denied: denied`.)
 2. ZimaOS App Store → **+** (custom install) → **Import**, paste:
@@ -51,8 +54,8 @@ pass on `master`. The package is private:
          - /DATA/AppData/self-hoster/data:/data   # settings, project list, checkouts
          - /DATA/AppData/self-hoster/apps:/apps   # each project's DATA_DIR (back up)
    ```
-3. Update later: `sudo docker compose pull && sudo docker compose up -d` in the app
-   folder, or the update action of the ZimaOS app.
+3. Update later: pull again with the `--config` command above, then
+   `sudo docker compose up -d` in the app folder (or restart the ZimaOS app).
 
 To build from source instead (any Docker host):
 
