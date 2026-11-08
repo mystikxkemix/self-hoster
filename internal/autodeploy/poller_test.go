@@ -34,7 +34,7 @@ func newFixture(t *testing.T) *fixture {
 		repo:   testutil.NewRepo(t, map[string]string{"version.txt": "v1"}),
 		store:  st,
 		sup:    sup,
-		poller: New(st, sup, time.Hour),
+		poller: New(st, sup, func() time.Duration { return time.Hour }),
 	}
 }
 
@@ -184,7 +184,7 @@ func TestRunStopsWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		New(f.store, f.sup, 10*time.Millisecond).Run(ctx)
+		New(f.store, f.sup, func() time.Duration { return 10 * time.Millisecond }).Run(ctx)
 		close(done)
 	}()
 	time.Sleep(50 * time.Millisecond)

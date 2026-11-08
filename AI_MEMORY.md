@@ -11,6 +11,10 @@
 - Failed builds are not retried per commit (`lastTried`, in memory); check errors are logged once per distinct error.
 - Each project gets a persistent folder SELFHOSTER_APPS_DIR/<name> (default /apps, Mike's choice), passed as DATA_DIR to build and run; user env may override it. Never deleted, not even by project delete. Checkouts under /data/projects are disposable.
 - budget-app (github.com/mystikxkemix/budget-app) is a single Next.js 15 + SQLite app, NOT Nx. Its `next build` races on SQLite (module-level WAL pragma in lib/db/client.ts, many build workers): run `node scripts/migrate.mjs` before `npm run build`.
+- Admin settings (username, hashed password, poll interval, link host) live in SELFHOSTER_DATA_DIR/settings.json (internal/settings); env vars are defaults. Basic auth checks go through settings.Manager.Authenticate, which caches the last verified password digest so PBKDF2 (600k iterations) runs once per password, not per request.
+- The poller re-reads its interval every second (dynamic from settings). Projects have an optional public `url` used by the UI's Open button; otherwise http://<linkHost or page host>:<port>.
+- UI layout: the page never scrolls on desktop; .project-list and .main scroll independently (min-height: 0 on flex/grid children). Below 760px it falls back to a normal scrolling page.
+- Browser UI checks: playwright-core (in the scratchpad, not the repo) driving the host Chrome with channel "chrome" and httpCredentials.
 - Development happens in the dev container (`.devcontainer/`); toolchain versions must match the Dockerfile.
 
 ## Conventions / gotchas

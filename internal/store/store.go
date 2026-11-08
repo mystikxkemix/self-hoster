@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
+
+	"selfhoster/internal/fileutil"
 )
 
 var (
@@ -43,6 +46,9 @@ type Project struct {
 	StaticDir string `json:"staticDir,omitempty"`
 	// SPA serves index.html for unknown paths, so client-side routing works on reload.
 	SPA bool `json:"spa,omitempty"`
+	// URL is where the project is reachable publicly (e.g. through nginx). Optional:
+	// the UI falls back to http://<link host>:<port>.
+	URL string `json:"url,omitempty"`
 	// AutoDeploy redeploys the project when a new commit lands on its branch (polled).
 	AutoDeploy bool `json:"autoDeploy,omitempty"`
 	// Enabled records whether the project should be running. It is restored when the container boots.
@@ -118,6 +124,7 @@ func (s *Store) Put(p Project) error {
 	p.Repo = strings.TrimSpace(p.Repo)
 	p.Branch = strings.TrimSpace(p.Branch)
 	p.StaticDir = strings.TrimSpace(p.StaticDir)
+	p.URL = strings.TrimSpace(p.URL)
 	if p.Type == "" {
 		p.Type = TypeService
 	}
@@ -191,6 +198,12 @@ func (s *Store) validate(p Project) error {
 	if s.opts.MinPort > 0 && (p.Port < s.opts.MinPort || p.Port > s.opts.MaxPort) {
 		return fmt.Errorf("port must be in the published range %d-%d", s.opts.MinPort, s.opts.MaxPort)
 	}
+	if p.URL != "" {
+		u, err := url.Parse(p.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return errors.New("public URL must be an http(s) URL, e.g. https://app.example.com")
+		}
+	}
 	for key := range p.Env {
 		if !envKeyPattern.MatchString(key) {
 			return fmt.Errorf("invalid environment variable name %q", key)
@@ -213,21 +226,5 @@ func (s *Store) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), ".config-*.json")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), s.path)
+	return fileutil.WriteFileAtomic(s.path, data)
 }

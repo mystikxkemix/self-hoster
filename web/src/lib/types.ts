@@ -26,6 +26,8 @@ export interface ProjectSpec {
   env?: Record<string, string>;
   staticDir?: string;
   spa?: boolean;
+  /** Public URL (e.g. served by nginx), used by the Open button. Optional. */
+  url?: string;
   /** Redeploy automatically when a new commit lands on the branch (checked every minute). */
   autoDeploy?: boolean;
 }
@@ -51,5 +53,24 @@ export function toSpec(p: ProjectSpec): ProjectSpec {
     staticDir: p.type === 'static' ? p.staticDir : undefined,
     spa: p.type === 'static' ? p.spa : undefined,
     autoDeploy: p.autoDeploy,
+    url: p.url,
   };
+}
+
+/** Admin settings, saved in settings.json on the data volume (mirrors internal/settings.View). */
+export interface Settings {
+  adminUser: string;
+  /** "env" until the password is changed from the settings page. */
+  passwordSource: 'env' | 'settings';
+  pollInterval: string;
+  pollIntervalDefault: string;
+  /** Host used to open projects without a public URL ("" = the host of this page). */
+  linkHost: string;
+  info: { dataDir: string; appsDir: string; ports: string };
+}
+
+export interface SettingsUpdate {
+  adminUser: string;
+  pollInterval: string;
+  linkHost: string;
 }

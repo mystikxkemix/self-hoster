@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"selfhoster/internal/settings"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
 	"selfhoster/internal/testutil"
@@ -21,10 +22,11 @@ const (
 )
 
 type fixture struct {
-	t     *testing.T
-	store *store.Store
-	sup   *supervisor.Supervisor
-	srv   *httptest.Server
+	t        *testing.T
+	store    *store.Store
+	sup      *supervisor.Supervisor
+	settings *settings.Manager
+	srv      *httptest.Server
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -35,12 +37,19 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	sup := supervisor.New(dataDir, filepath.Join(dataDir, "apps"))
-	srv := httptest.NewServer(New(st, sup, testUser, testPassword))
+	set, err := settings.Open(filepath.Join(dataDir, "settings.json"), settings.Defaults{
+		AdminUser: testUser, AdminPassword: testPassword, PollInterval: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := Info{DataDir: dataDir, AppsDir: filepath.Join(dataDir, "apps"), Ports: "4000-4019"}
+	srv := httptest.NewServer(New(st, sup, set, info))
 	t.Cleanup(func() {
 		srv.Close()
 		sup.Shutdown()
 	})
-	return &fixture{t: t, store: st, sup: sup, srv: srv}
+	return &fixture{t: t, store: st, sup: sup, settings: set, srv: srv}
 }
 
 // do sends an authenticated request and returns the status code and raw body.
@@ -324,4 +333,59 @@ func TestActionsIgnoreGet(t *testing.T) {
 	if p, _ := f.store.Get("api"); p.Enabled {
 		t.Fatal("a GET must not enable the project")
 	}
+}
+
+func TestSettingsRoutes(t *testing.T) {
+	f := newFixture(t)
+
+	code, body := f.do("GET", "/api/settings", "")
+	expect(t, code, body, http.StatusOK, `"adminUser":"admin"`)
+	expect(t, code, body, http.StatusOK, `"ports":"4000-4019"`)
+	if strings.Contains(body, "assword\":\"") || strings.Contains(body, testPassword) {
+		t.Fatalf("settings leak the password: %s", body)
+	}
+
+	code, body = f.do("PUT", "/api/settings", `{"adminUser":"admin","pollInterval":"1s","linkHost":""}`)
+	expect(t, code, body, http.StatusBadRequest, "at least 5s")
+	code, body = f.do("PUT", "/api/settings", `{"adminUser":"admin","oops":true}`)
+	expect(t, code, body, http.StatusBadRequest, "unknown field")
+
+	code, body = f.do("PUT", "/api/settings", `{"adminUser":"admin","pollInterval":"30s","linkHost":"zima.local"}`)
+	expect(t, code, body, http.StatusOK, `"linkHost":"zima.local"`)
+	if f.settings.PollInterval() != 30*time.Second {
+		t.Fatalf("interval not applied: %s", f.settings.PollInterval())
+	}
+
+	code, body = f.do("POST", "/api/settings/password", `{"current":"nope","new":"new-password-1"}`)
+	expect(t, code, body, http.StatusForbidden, "incorrect")
+	code, body = f.do("POST", "/api/settings/password", `{"current":"pw","new":"short"}`)
+	expect(t, code, body, http.StatusBadRequest, "at least 8")
+	code, body = f.do("POST", "/api/settings/password", `{"current":"pw","new":"new-password-1"}`)
+	expect(t, code, body, http.StatusNoContent, "")
+
+	// The old password stops working immediately, the new one works.
+	if code, _ := f.do("GET", "/api/settings", ""); code != http.StatusUnauthorized {
+		t.Fatalf("old password still accepted: %d", code)
+	}
+	code, body = f.doAs(testUser, "new-password-1", "GET", "/api/settings", "")
+	expect(t, code, body, http.StatusOK, `"passwordSource":"settings"`)
+}
+
+func TestSettingsUsernameChangeRequiresNewLogin(t *testing.T) {
+	f := newFixture(t)
+	code, body := f.do("PUT", "/api/settings", `{"adminUser":"kemix","pollInterval":"","linkHost":""}`)
+	expect(t, code, body, http.StatusOK, `"adminUser":"kemix"`)
+	if code, _ := f.do("GET", "/api/projects", ""); code != http.StatusUnauthorized {
+		t.Fatalf("old username still accepted: %d", code)
+	}
+	code, body = f.doAs("kemix", testPassword, "GET", "/api/projects", "")
+	expect(t, code, body, http.StatusOK, "")
+}
+
+func TestProjectPublicURLValidation(t *testing.T) {
+	f := newFixture(t)
+	code, body := f.do("POST", "/api/projects", `{"name":"a","repo":"r","startCmd":"s","port":4001,"url":"ftp://x"}`)
+	expect(t, code, body, http.StatusBadRequest, "public URL")
+	code, body = f.do("POST", "/api/projects", `{"name":"a","repo":"r","startCmd":"s","port":4001,"url":"https://budget.example.com"}`)
+	expect(t, code, body, http.StatusCreated, `"url":"https://budget.example.com"`)
 }
