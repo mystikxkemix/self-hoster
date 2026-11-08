@@ -4,8 +4,11 @@
 ARG GO_VERSION=1.27
 ARG NODE_VERSION=24
 
-# --- Build the admin web app ---------------------------------------------------
-FROM node:${NODE_VERSION}-trixie-slim AS web
+# Build stages run on the builder's own platform (no CPU emulation when building
+# for another one); only the runtime stage uses the target platform.
+
+# --- Build the admin web app (static files, platform-independent) -------------
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-trixie-slim AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-fund --no-audit
@@ -13,15 +16,17 @@ COPY web/ ./
 # Outputs to /src/internal/api/ui/dist (see web/vite.config.ts).
 RUN npm run build
 
-# --- Build the self-hoster binary (embeds the web app) -------------------------
-FROM golang:${GO_VERSION}-trixie AS build
+# --- Build the self-hoster binary (embeds the web app), cross-compiled ----------
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-trixie AS build
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/internal/api/ui/dist ./internal/api/ui/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/self-hoster ./cmd/self-hoster
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/self-hoster ./cmd/self-hoster
 
+# Go toolchain for hosted Go projects: must match the target platform.
 FROM golang:${GO_VERSION}-trixie AS gotoolchain
 
 # --- Runtime: Node + Go toolchains, git, and the supervisor --------------------

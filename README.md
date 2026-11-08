@@ -24,6 +24,38 @@ ZimaOS
 
 ## Install on ZimaOS
 
+CI publishes `ghcr.io/mystikxkemix/self-hoster:latest` (linux/amd64) after the tests
+pass on `master`. The package is private:
+
+1. Create a GitHub **classic** token with only `read:packages`, then on ZimaOS:
+   ```sh
+   read -s GHCR_TOKEN && echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u mystikxkemix --password-stdin; unset GHCR_TOKEN
+   ```
+   (Your GitHub password does not work there: `denied: denied`.)
+2. ZimaOS App Store → **+** (custom install) → **Import**, paste:
+   ```yaml
+   name: self-hoster
+   services:
+     self-hoster:
+       image: ghcr.io/mystikxkemix/self-hoster:latest
+       container_name: self-hoster
+       restart: unless-stopped
+       stop_grace_period: 30s
+       environment:
+         SELFHOSTER_ADMIN_PASSWORD: change-me   # only until changed in Settings
+         SELFHOSTER_PORTS: "4000-4019"
+       ports:
+         - "8080:8080"             # admin UI (keep LAN-only)
+         - "4000-4019:4000-4019"   # projects, routed by your nginx
+       volumes:
+         - /DATA/AppData/self-hoster/data:/data   # settings, project list, checkouts
+         - /DATA/AppData/self-hoster/apps:/apps   # each project's DATA_DIR (back up)
+   ```
+3. Update later: `sudo docker compose pull && sudo docker compose up -d` in the app
+   folder, or the update action of the ZimaOS app.
+
+To build from source instead (any Docker host):
+
 ```sh
 git clone <this repo> self-hoster && cd self-hoster
 cp .env.example .env            # set SELFHOSTER_ADMIN_PASSWORD
