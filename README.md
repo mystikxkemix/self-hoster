@@ -52,6 +52,9 @@ pass on `master`. The package is private:
          SELFHOSTER_ADMIN_PASSWORD: change-me   # only until changed in Settings
          SELFHOSTER_ADDR: ":8090"               # admin UI (keep LAN-only)
          SELFHOSTER_PORTS: "4000-4019"          # projects, routed by your nginx
+         # Optional, lets Claude manage projects (see "Claude (MCP)" below):
+         # SELFHOSTER_MCP_ADDR: ":8091"
+         # SELFHOSTER_MCP_URL: "https://selfhoster.example.com"
        volumes:
          - /DATA/AppData/self-hoster/data:/data   # settings, project list, checkouts
          - /DATA/AppData/self-hoster/apps:/apps   # each project's DATA_DIR (back up)
@@ -139,6 +142,44 @@ server {
 }
 ```
 
+## Claude (MCP)
+
+self-hoster can expose an [MCP](https://modelcontextprotocol.io) endpoint so Claude
+(claude.ai, Desktop, mobile, Claude Code) can list projects, read logs, deploy,
+start/stop/restart, create projects and edit their settings and env vars. Deleting a
+project stays a web UI action. It is off by default.
+
+1. Set `SELFHOSTER_MCP_ADDR` (e.g. `:8091`) and `SELFHOSTER_MCP_URL` (the public HTTPS
+   address nginx serves it at) on the container.
+2. Expose **only that port** through nginx, over HTTPS. claude.ai connectors call it
+   from Anthropic's cloud, so it must be reachable from the internet. The admin port
+   stays LAN-only.
+   ```nginx
+   server {
+       server_name selfhoster.example.com;   # = SELFHOSTER_MCP_URL
+       location / {
+           proxy_pass http://<zima-ip>:8091;
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+3. In Claude: **Settings → Connectors → Add custom connector**, URL
+   `https://selfhoster.example.com/mcp`. With Claude Code:
+   `claude mcp add --transport http self-hoster https://selfhoster.example.com/mcp`.
+4. Claude opens a self-hoster page asking for the **admin username and password**.
+   Allowing it connects Claude; access tokens last 1 hour and refresh for 30 days of
+   inactivity.
+
+Connected clients are listed on the **Settings** page, where each can be revoked at
+once. Tokens are stored hashed in `data/oauth.json`; deleting that file disconnects
+every client. The consent page locks for 30s (doubling, up to 15 min) after 5 wrong
+passwords. Claude never sees env var values (only their names) nor tokens embedded in
+repo URLs.
+
+> Anyone holding a connection can change a project's build command, which runs as a
+> shell command on the box. Use a strong admin password before exposing the endpoint.
+
 ## MongoDB
 
 Not managed here: add e.g. `MONGO_URL=mongodb://my-api:<pw>@<zima-ip>:27017/my-api`
@@ -157,6 +198,8 @@ the original ZimaBoard (Celeron N3350/N3450) has none and is stuck on `mongo:4.4
 | `SELFHOSTER_DATA_DIR` | `/data` | State, checkouts and caches |
 | `SELFHOSTER_APPS_DIR` | `/apps` | Parent of each project's persistent `DATA_DIR` |
 | `SELFHOSTER_POLL_INTERVAL` | `1m` | Auto-deploy check interval (default; editable in Settings) |
+| `SELFHOSTER_MCP_ADDR` | (off) | MCP + OAuth listen address for Claude, e.g. `:8091` |
+| `SELFHOSTER_MCP_URL` | (from request) | Public base URL of the MCP port, e.g. `https://selfhoster.example.com` |
 
 `SELFHOSTER_*` variables are never passed to projects.
 
@@ -164,7 +207,7 @@ the original ZimaBoard (Celeron N3350/N3450) has none and is stuck on `mongo:4.4
 
 All routes use basic auth. `GET/POST /api/projects`,
 `GET/PUT/DELETE /api/projects/{name}`, `POST /api/projects/{name}/{deploy|start|stop|restart}`,
-`GET /api/projects/{name}/logs`. Unknown `/api` routes return a JSON 404.
+`GET /api/projects/{name}/logs`, `GET /api/mcp`, `DELETE /api/mcp/connections/{id}`. Unknown `/api` routes return a JSON 404.
 
 Auto-deploy usually makes manual calls unnecessary, but a deploy can be forced with:
 

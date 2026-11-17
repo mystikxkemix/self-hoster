@@ -17,6 +17,12 @@
 - Browser UI checks: playwright-core (in the scratchpad, not the repo) driving the host Chrome with channel "chrome" and httpCredentials.
 - ZimaOS: root filesystem is read-only (no /root/.docker), the user (kemix, HOME=/DATA) is not in the docker group. Private GHCR pulls work with `sudo docker --config /DATA/.docker pull ghcr.io/mystikxkemix/self-hoster:latest` after a user-level `docker login ghcr.io` (classic token, read:packages). Verified 2026-11-08.
 - ZimaOS install (running since 2026-11-08): imported compose with `network_mode: host` (the ZimaOS importer rejects port ranges), admin on :8090 (SELFHOSTER_ADDR), projects 4000-4019, volumes /DATA/AppData/self-hoster/{data,apps}.
+- MCP for Claude (2026-11-17, Mike's choices): tools = operate + edit, NO delete; served on its own port SELFHOSTER_MCP_ADDR (off when unset) so nginx exposes only it publicly, admin port stays LAN-only. Stdlib-only, no MCP SDK: `internal/oauth` (OAuth 2.1 AS: RFC 9728/8414 metadata, open DCR capped at 100 clients, PKCE S256 required, rotating refresh tokens, hashed tokens in data/oauth.json, consent = admin user/password with a global lockout) and `internal/mcp` (stateless Streamable HTTP, JSON responses only, no SSE).
+- MCP tools never return env values (only `envKeys`) and redact repo URL credentials; update_project/set_env are patches, and a repo containing `***@` is rejected so a redacted URL cannot overwrite the real token.
+- OAuth tokens are bound to the resource URL (base + /mcp). Without SELFHOSTER_MCP_URL the base comes from Host + X-Forwarded-Proto, so a client switching hosts must reconnect.
+- store.Options.ReservedPorts holds both the admin and MCP ports.
+- Project operations (create, save + restart if running, delete, deploy/start/stop/restart and the Enabled flag) live in `internal/projects`, shared by the admin API and the MCP tools. `Save` always keeps the stored Enabled: only the lifecycle actions change it.
+- web/node_modules is installed by the Linux dev container: on the macOS host `npm run build` fails (rolldown native binding) and NODE_ENV=production omits dev deps; build a copy in the scratchpad with `npm ci --include=dev` instead.
 - Development happens in the dev container (`.devcontainer/`); toolchain versions must match the Dockerfile.
 
 ## Conventions / gotchas

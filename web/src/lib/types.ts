@@ -69,6 +69,22 @@ export interface Settings {
   info: { dataDir: string; appsDir: string; ports: string };
 }
 
+/** An MCP client (e.g. Claude) authorized through OAuth. */
+export interface McpConnection {
+  id: string;
+  clientName: string;
+  createdAt: string;
+  lastUsed: string;
+}
+
+export interface McpStatus {
+  /** False unless SELFHOSTER_MCP_ADDR is set. */
+  enabled: boolean;
+  /** Public MCP endpoint from SELFHOSTER_MCP_URL ("" when not set). */
+  url: string;
+  connections: McpConnection[];
+}
+
 export interface SettingsUpdate {
   adminUser: string;
   pollInterval: string;
