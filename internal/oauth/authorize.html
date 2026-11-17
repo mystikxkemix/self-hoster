@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Connect to self-hoster</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f5f5f4; --card: #fff; --text: #1c1917; --muted: #57534e; --border: #d6d3d1; --accent: #2563eb; --error: #b91c1c; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0c0a09; --card: #1c1917; --text: #f5f5f4; --muted: #a8a29e; --border: #44403c; --accent: #60a5fa; --error: #f87171; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+    main { width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    strong { color: var(--text); }
+    label { display: block; margin-bottom: 12px; font-weight: 500; }
+    input { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+    .error { color: var(--error); }
+    .actions { display: flex; gap: 8px; margin-top: 20px; }
+    button { flex: 1; padding: 9px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Connect to self-hoster</h1>
+    <p><strong>{{.ClientName}}</strong> wants to manage your hosted projects: read their status and logs, deploy, start, stop, and edit their settings and environment variables.</p>
+    <p>You will be sent back to <strong>{{.RedirectHost}}</strong>. Sign in with the admin account to allow it.</p>
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    <form method="post" action="/authorize">
+      <input type="hidden" name="response_type" value="{{.ResponseType}}">
+      <input type="hidden" name="client_id" value="{{.ClientID}}">
+      <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
+      <input type="hidden" name="state" value="{{.State}}">
+      <input type="hidden" name="scope" value="{{.Scope}}">
+      <input type="hidden" name="code_challenge" value="{{.CodeChallenge}}">
+      <input type="hidden" name="code_challenge_method" value="{{.CodeChallengeMethod}}">
+      <input type="hidden" name="resource" value="{{.Resource}}">
+      <label>Username <input name="username" autocomplete="username" required autofocus></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <div class="actions">
+        <button type="submit" name="action" value="deny" formnovalidate>Deny</button>
+        <button type="submit" name="action" value="allow" class="primary">Allow</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

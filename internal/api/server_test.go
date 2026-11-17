@@ -32,7 +32,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	dataDir := t.TempDir()
-	st, err := store.Open(filepath.Join(dataDir, "config.json"), store.Options{ReservedPort: 8080, MinPort: 4000, MaxPort: 4019})
+	st, err := store.Open(filepath.Join(dataDir, "config.json"), store.Options{ReservedPorts: []int{8080}, MinPort: 4000, MaxPort: 4019})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	info := Info{DataDir: dataDir, AppsDir: filepath.Join(dataDir, "apps"), Ports: "4000-4019"}
-	srv := httptest.NewServer(New(st, sup, set, info))
+	srv := httptest.NewServer(New(st, sup, set, nil, info))
 	t.Cleanup(func() {
 		srv.Close()
 		sup.Shutdown()
@@ -388,4 +388,12 @@ func TestProjectPublicURLValidation(t *testing.T) {
 	expect(t, code, body, http.StatusBadRequest, "public URL")
 	code, body = f.do("POST", "/api/projects", `{"name":"a","repo":"r","startCmd":"s","port":4001,"url":"https://budget.example.com"}`)
 	expect(t, code, body, http.StatusCreated, `"url":"https://budget.example.com"`)
+}
+
+func TestMCPDisabled(t *testing.T) {
+	f := newFixture(t)
+	code, body := f.do("GET", "/api/mcp", "")
+	expect(t, code, body, http.StatusOK, `"enabled":false`)
+	code, body = f.do("DELETE", "/api/mcp/connections/abc", "")
+	expect(t, code, body, http.StatusNotFound, "disabled")
 }
