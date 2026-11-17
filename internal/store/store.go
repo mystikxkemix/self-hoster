@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -57,8 +58,8 @@ type Project struct {
 
 // Options constrains which ports projects may use.
 type Options struct {
-	// ReservedPort is the admin UI port, never assignable to a project.
-	ReservedPort int
+	// ReservedPorts are self-hoster's own ports (admin UI, MCP), never assignable to a project.
+	ReservedPorts []int
 	// MinPort and MaxPort bound the port range published by the container. Zero disables the check.
 	MinPort int
 	MaxPort int
@@ -192,8 +193,8 @@ func (s *Store) validate(p Project) error {
 	if p.Port < 1 || p.Port > 65535 {
 		return errors.New("port must be between 1 and 65535")
 	}
-	if p.Port == s.opts.ReservedPort {
-		return fmt.Errorf("port %d is reserved for the admin UI", p.Port)
+	if slices.Contains(s.opts.ReservedPorts, p.Port) {
+		return fmt.Errorf("port %d is reserved for self-hoster (admin UI or MCP)", p.Port)
 	}
 	if s.opts.MinPort > 0 && (p.Port < s.opts.MinPort || p.Port > s.opts.MaxPort) {
 		return fmt.Errorf("port must be in the published range %d-%d", s.opts.MinPort, s.opts.MaxPort)

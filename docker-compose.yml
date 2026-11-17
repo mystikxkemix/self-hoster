@@ -10,6 +10,9 @@ services:
       SELFHOSTER_ADMIN_PASSWORD: ${SELFHOSTER_ADMIN_PASSWORD:?set SELFHOSTER_ADMIN_PASSWORD in .env}
       # Must match the published range below; projects outside it are rejected.
       SELFHOSTER_PORTS: "4000-4019"
+      # Optional MCP endpoint for Claude (see README "Claude (MCP)"); add its port below.
+      # SELFHOSTER_MCP_ADDR: ":8091"
+      # SELFHOSTER_MCP_URL: "https://selfhoster.example.com"
     ports:
       - "8080:8080"             # admin UI (keep it LAN-only)
       - "4000-4019:4000-4019"   # one port per project, routed by your nginx

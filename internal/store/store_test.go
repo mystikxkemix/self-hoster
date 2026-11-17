@@ -39,14 +39,14 @@ func TestPutValidation(t *testing.T) {
 		{"static folder absolute", func(p *Project) { p.Type, p.StaticDir = TypeStatic, "/etc" }, "relative path inside"},
 		{"unknown type", func(p *Project) { p.Type = "docker" }, "type must be"},
 		{"port too high", func(p *Project) { p.Port = 70000 }, "between 1 and 65535"},
-		{"reserved admin port", func(p *Project) { p.Port = 8080 }, "reserved for the admin UI"},
+		{"reserved admin port", func(p *Project) { p.Port = 8080 }, "reserved for self-hoster"},
 		{"port outside published range", func(p *Project) { p.Port = 5000 }, "published range"},
 		{"invalid env key", func(p *Project) { p.Env = map[string]string{"BAD-KEY": "x"} }, "invalid environment variable"},
 		{"PORT in env", func(p *Project) { p.Env = map[string]string{"PORT": "1"} }, "PORT is set from the project port"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s, _ := openTemp(t, Options{ReservedPort: 8080, MinPort: 4000, MaxPort: 4019})
+			s, _ := openTemp(t, Options{ReservedPorts: []int{8080}, MinPort: 4000, MaxPort: 4019})
 			p := validProject()
 			tc.mutate(&p)
 			err := s.Put(p)
