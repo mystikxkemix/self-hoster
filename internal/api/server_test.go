@@ -452,3 +452,9 @@ func TestMCPRoutes(t *testing.T) {
 	code, body := f.do("GET", "/api/mcp", "")
 	expect(t, code, body, http.StatusOK, `"url":"https://mcp.example.com/mcp"`)
 }
+
+func TestSettingsShowVersion(t *testing.T) {
+	f := newFixture(t)
+	code, body := f.do("GET", "/api/settings", "")
+	expect(t, code, body, http.StatusOK, `"version":"`)
+}

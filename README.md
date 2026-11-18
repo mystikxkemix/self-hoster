@@ -24,8 +24,10 @@ ZimaOS
 
 ## Install on ZimaOS
 
-CI publishes `ghcr.io/mystikxkemix/self-hoster:latest` (linux/amd64) after the tests
-pass on `master`. The package is private:
+CI publishes `ghcr.io/mystikxkemix/self-hoster` (linux/amd64) after the tests pass on
+`master`. Each push gets a version `1.<number of commits on master>` (e.g. `1.42`): the
+image is tagged with it and with `latest`, and the Settings page shows it. To stay on one
+version, use `:1.42` instead of `:latest`. The package is private:
 
 1. Create a GitHub **classic** token with only `read:packages`, then on ZimaOS log in
    as your user (ZimaOS's root filesystem is read-only, so root cannot store a login)
@@ -60,7 +62,8 @@ pass on `master`. The package is private:
    ```
    Then open `http://<zima-ip>:8090`.
 3. Update later: pull again with the `--config` command above, then
-   `sudo docker compose up -d` in the app folder (or restart the ZimaOS app).
+   `sudo docker compose up -d` in the app folder (or restart the ZimaOS app). To go back
+   to an older version, put its tag (e.g. `:1.41`) in the compose `image:` line.
 
 To build from source instead (any Docker host):
 
