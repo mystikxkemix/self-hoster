@@ -89,5 +89,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           build-args: VERSION=${{ steps.version.outputs.version }}
           labels: ${{ steps.meta.outputs.labels }}
+          # No build provenance: it embeds the GitHub push event (commit emails and
+          # messages), which anyone could read if the package is public.
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
