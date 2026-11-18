@@ -23,6 +23,8 @@
 - Project operations (create, save + restart if running, delete, deploy/start/stop/restart and the Enabled flag) live in `internal/projects`, shared by the admin API and the MCP tools. `Save` always keeps the stored Enabled: only the lifecycle actions change it.
 - web/node_modules is installed by the Linux dev container: on the macOS host `npm run build` fails (rolldown native binding) and NODE_ENV=production omits dev deps; build a copy in the scratchpad with `npm ci --include=dev` instead.
 - Versioning (Mike's choice, 2026-11-18): version = `1.<git rev-list --count HEAD>` on master, computed in the CI image job (needs `fetch-depth: 0`). It tags the image (plus `latest` and `sha-<short>`) and is injected with `-X selfhoster/internal/buildinfo.version` through the Dockerfile VERSION build arg. .git is in .dockerignore, so Go's vcs info is empty in Docker builds; local builds fall back to the short commit, else "dev". Settings > System shows it.
+- CI builds images with `provenance: false`: BuildKit provenance from build-push-action embedded the GitHub push event (commit author emails, messages). Decided 2026-11-18 before making the GHCR package public.
+- Git identity for this repo (2026-11-18): every commit is `kemix <9988890+mystikxkemix@users.noreply.github.com>` (repo-local user.email), with no Co-Authored-By trailers. History was rewritten to this on 2026-11-18.
 - Development happens in the dev container (`.devcontainer/`); toolchain versions must match the Dockerfile.
 
 ## Conventions / gotchas
