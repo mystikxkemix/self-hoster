@@ -19,6 +19,7 @@ import (
 
 	"selfhoster/internal/api"
 	"selfhoster/internal/autodeploy"
+	"selfhoster/internal/oauth"
 	"selfhoster/internal/settings"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
@@ -66,12 +67,26 @@ func run() error {
 	if password == "" && !set.HasStoredPassword() {
 		return errors.New("SELFHOSTER_ADMIN_PASSWORD must be set (until a password is saved from the settings page)")
 	}
+	// The MCP endpoint (for Claude) is served by the admin server. It is off unless
+	// its public base URL is set: OAuth clients need a stable issuer URL.
+	var provider *oauth.Provider
+	if mcpURL := os.Getenv("SELFHOSTER_MCP_URL"); mcpURL != "" {
+		provider, err = oauth.Open(oauth.Config{
+			Path:      filepath.Join(dataDir, "oauth.json"),
+			PublicURL: mcpURL,
+			Auth:      set,
+		})
+		if err != nil {
+			return err
+		}
+		log.Printf("MCP endpoint enabled at %s%s", provider.PublicURL(), oauth.ResourcePath)
+	}
 	sup := supervisor.New(dataDir, appsDir)
 	restore(st, sup)
 
 	srv := &http.Server{
 		Addr: addr,
-		Handler: api.New(st, sup, set, api.Info{
+		Handler: api.New(st, sup, set, provider, api.Info{
 			DataDir: dataDir, AppsDir: appsDir, Ports: os.Getenv("SELFHOSTER_PORTS"),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
