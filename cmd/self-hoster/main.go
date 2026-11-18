@@ -19,7 +19,6 @@ import (
 
 	"selfhoster/internal/api"
 	"selfhoster/internal/autodeploy"
-	"selfhoster/internal/mcp"
 	"selfhoster/internal/oauth"
 	"selfhoster/internal/settings"
 	"selfhoster/internal/store"
@@ -36,8 +35,6 @@ func run() error {
 	dataDir := envOr("SELFHOSTER_DATA_DIR", "/data")
 	appsDir := envOr("SELFHOSTER_APPS_DIR", "/apps")
 	addr := envOr("SELFHOSTER_ADDR", ":8080")
-	// The MCP endpoint (for Claude) is off unless it gets its own listen address.
-	mcpAddr := os.Getenv("SELFHOSTER_MCP_ADDR")
 	user := envOr("SELFHOSTER_ADMIN_USER", "admin")
 	password := os.Getenv("SELFHOSTER_ADMIN_PASSWORD")
 
@@ -46,7 +43,7 @@ func run() error {
 		return fmt.Errorf("SELFHOSTER_POLL_INTERVAL: %w", err)
 	}
 
-	opts, err := storeOptions(addr, mcpAddr, os.Getenv("SELFHOSTER_PORTS"))
+	opts, err := storeOptions(addr, os.Getenv("SELFHOSTER_PORTS"))
 	if err != nil {
 		return err
 	}
@@ -70,45 +67,35 @@ func run() error {
 	if password == "" && !set.HasStoredPassword() {
 		return errors.New("SELFHOSTER_ADMIN_PASSWORD must be set (until a password is saved from the settings page)")
 	}
+	// The MCP endpoint (for Claude) is served by the admin server. It is off unless
+	// its public base URL is set: OAuth clients need a stable issuer URL.
 	var provider *oauth.Provider
-	if mcpAddr != "" {
+	if mcpURL := os.Getenv("SELFHOSTER_MCP_URL"); mcpURL != "" {
 		provider, err = oauth.Open(oauth.Config{
 			Path:      filepath.Join(dataDir, "oauth.json"),
-			PublicURL: os.Getenv("SELFHOSTER_MCP_URL"),
+			PublicURL: mcpURL,
 			Auth:      set,
 		})
 		if err != nil {
 			return err
 		}
+		log.Printf("MCP endpoint enabled at %s%s", provider.PublicURL(), oauth.ResourcePath)
 	}
 	sup := supervisor.New(dataDir, appsDir)
 	restore(st, sup)
 
-	servers := []*http.Server{{
+	srv := &http.Server{
 		Addr: addr,
 		Handler: api.New(st, sup, set, provider, api.Info{
 			DataDir: dataDir, AppsDir: appsDir, Ports: os.Getenv("SELFHOSTER_PORTS"),
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
-	}}
-	if provider != nil {
-		servers = append(servers, &http.Server{
-			Addr:              mcpAddr,
-			Handler:           mcp.Handler(provider, mcp.New(st, sup, os.Getenv("SELFHOSTER_PORTS"))),
-			ReadHeaderTimeout: 10 * time.Second,
-		})
 	}
-	serveErr := make(chan error, len(servers))
-	for i, srv := range servers {
-		go func() {
-			if i == 0 {
-				log.Printf("admin UI listening on %s", srv.Addr)
-			} else {
-				log.Printf("MCP endpoint listening on %s (path %s)", srv.Addr, oauth.ResourcePath)
-			}
-			serveErr <- srv.ListenAndServe()
-		}()
-	}
+	serveErr := make(chan error, 1)
+	go func() {
+		log.Printf("admin UI listening on %s", addr)
+		serveErr <- srv.ListenAndServe()
+	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -137,9 +124,7 @@ func run() error {
 	log.Print("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, srv := range servers {
-		_ = srv.Shutdown(shutdownCtx)
-	}
+	_ = srv.Shutdown(shutdownCtx)
 	shutdown()
 	return nil
 }
@@ -164,29 +149,17 @@ func restore(st *store.Store, sup *supervisor.Supervisor) {
 	}
 }
 
-// storeOptions reserves the admin and MCP ports and, when set, restricts projects to
-// the port range published by the container (e.g. "4000-4019").
-func storeOptions(addr, mcpAddr, portRange string) (store.Options, error) {
+// storeOptions reserves the admin port and, when set, restricts projects to the
+// port range published by the container (e.g. "4000-4019").
+func storeOptions(addr, portRange string) (store.Options, error) {
 	var opts store.Options
-	reserved := map[string]string{"SELFHOSTER_ADDR": addr}
-	if mcpAddr != "" {
-		reserved["SELFHOSTER_MCP_ADDR"] = mcpAddr
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return opts, fmt.Errorf("SELFHOSTER_ADDR: %w", err)
 	}
-	for name, value := range reserved {
-		_, port, err := net.SplitHostPort(value)
-		if err != nil {
-			return opts, fmt.Errorf("%s: %w", name, err)
-		}
-		n, err := strconv.Atoi(port)
-		if err != nil {
-			return opts, fmt.Errorf("%s: %w", name, err)
-		}
-		opts.ReservedPorts = append(opts.ReservedPorts, n)
+	if opts.ReservedPort, err = strconv.Atoi(port); err != nil {
+		return opts, fmt.Errorf("SELFHOSTER_ADDR: %w", err)
 	}
-	if len(opts.ReservedPorts) == 2 && opts.ReservedPorts[0] == opts.ReservedPorts[1] {
-		return opts, errors.New("SELFHOSTER_MCP_ADDR must use a different port than SELFHOSTER_ADDR")
-	}
-	var err error
 	if portRange == "" {
 		return opts, nil
 	}

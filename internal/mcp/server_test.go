@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"selfhoster/internal/oauth"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
 	"selfhoster/internal/testutil"
@@ -26,13 +25,13 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	dir := t.TempDir()
-	st, err := store.Open(filepath.Join(dir, "config.json"), store.Options{ReservedPorts: []int{8080, 8091}, MinPort: 4000, MaxPort: 4019})
+	st, err := store.Open(filepath.Join(dir, "config.json"), store.Options{ReservedPort: 8080, MinPort: 4000, MaxPort: 4019})
 	if err != nil {
 		t.Fatal(err)
 	}
 	sup := supervisor.New(dir, filepath.Join(dir, "apps"))
-	// The tools are tested without OAuth (covered in internal/oauth); TestHandlerRequiresToken
-	// checks the wiring.
+	// The tools are tested without OAuth: the flow is covered in internal/oauth and the
+	// wiring in internal/api (TestMCPRoutes).
 	srv := httptest.NewServer(New(st, sup, "4000-4019"))
 	t.Cleanup(func() {
 		srv.Close()
@@ -182,7 +181,7 @@ func TestCreateEditAndHideSecrets(t *testing.T) {
 	failures := []struct{ tool, args, want string }{
 		{"update_project", `{"name":"api","repo":"https://***@github.com/me/api.git"}`, "redacted"},
 		{"update_project", `{"name":"api","command":"x"}`, "unknown field"},
-		{"update_project", `{"name":"api","port":8091}`, "reserved"},
+		{"update_project", `{"name":"api","port":8080}`, "reserved for the admin UI"},
 		{"set_env", `{"name":"api","set":{"PORT":"1"}}`, "PORT"},
 		{"set_env", `{"name":"api"}`, "nothing to change"},
 		{"create_project", `{"name":"api","repo":"r","startCmd":"s","port":4002}`, "already exists"},
@@ -223,39 +222,3 @@ func TestDeployStopAndLogs(t *testing.T) {
 		t.Fatal("stop did not stop and disable the project")
 	}
 }
-
-// TestHandlerRequiresToken checks the MCP endpoint is behind OAuth and the OAuth
-// routes are mounted next to it.
-func TestHandlerRequiresToken(t *testing.T) {
-	dir := t.TempDir()
-	st, _ := store.Open(filepath.Join(dir, "config.json"), store.Options{})
-	sup := supervisor.New(dir, filepath.Join(dir, "apps"))
-	t.Cleanup(sup.Shutdown)
-	provider, err := oauth.Open(oauth.Config{Path: filepath.Join(dir, "oauth.json"), Auth: denyAll{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := httptest.NewServer(Handler(provider, New(st, sup, "")))
-	t.Cleanup(srv.Close)
-
-	res, err := http.Post(srv.URL+"/mcp", "application/json", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	if res.StatusCode != http.StatusUnauthorized || !strings.Contains(res.Header.Get("WWW-Authenticate"), "resource_metadata") {
-		t.Fatalf("status %d, WWW-Authenticate %q", res.StatusCode, res.Header.Get("WWW-Authenticate"))
-	}
-	res, err = http.Get(srv.URL + "/.well-known/oauth-authorization-server")
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("metadata status %d", res.StatusCode)
-	}
-}
-
-type denyAll struct{}
-
-func (denyAll) Authenticate(string, string) bool { return false }

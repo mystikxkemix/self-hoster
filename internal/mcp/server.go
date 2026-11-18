@@ -56,12 +56,15 @@ func New(st *store.Store, sup *supervisor.Supervisor, ports string) *Server {
 	return s
 }
 
-// Handler serves the OAuth endpoints and the MCP endpoint they protect.
-func Handler(provider *oauth.Provider, s *Server) http.Handler {
-	mux := http.NewServeMux()
+// Register mounts the OAuth endpoints and the MCP endpoint they protect on mux.
+// These routes use OAuth, not the admin basic auth.
+func Register(mux *http.ServeMux, provider *oauth.Provider, s *Server) {
 	provider.Routes(mux)
-	mux.Handle(oauth.ResourcePath, provider.Protect(s))
-	return mux
+	protected := provider.Protect(s)
+	// One pattern per method: a method-less "/mcp" would conflict with the UI's "GET /".
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+		mux.Handle(method+" "+oauth.ResourcePath, protected)
+	}
 }
 
 type rpcRequest struct {
