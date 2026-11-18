@@ -1,4 +1,12 @@
-import { type Project, type ProjectAction, type ProjectSpec, type Settings, type SettingsUpdate, toSpec } from './types';
+import {
+  type McpStatus,
+  type Project,
+  type ProjectAction,
+  type ProjectSpec,
+  type Settings,
+  type SettingsUpdate,
+  toSpec,
+} from './types';
 
 const BASE = '/api';
 
@@ -28,6 +36,8 @@ export const api = {
   updateSettings: (update: SettingsUpdate) => request<Settings>('PUT', '/settings', update),
   changePassword: (current: string, next: string) =>
     request<void>('POST', '/settings/password', { current, new: next }),
+  mcp: () => request<McpStatus>('GET', '/mcp'),
+  revokeMcpConnection: (id: string) => request<void>('DELETE', `/mcp/connections/${encodeURIComponent(id)}`),
 };
 
 export function errorMessage(err: unknown): string {
