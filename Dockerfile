@@ -19,12 +19,14 @@ RUN npm run build
 # --- Build the self-hoster binary (embeds the web app), cross-compiled ----------
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-trixie AS build
 ARG TARGETOS TARGETARCH
+# Version shown on the settings page, e.g. 1.42 (set by CI; the git commit or "dev" when empty).
+ARG VERSION=
 WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/internal/api/ui/dist ./internal/api/ui/dist
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/self-hoster ./cmd/self-hoster
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X selfhoster/internal/buildinfo.version=${VERSION}" -o /out/self-hoster ./cmd/self-hoster
 
 # Go toolchain for hosted Go projects: must match the target platform.
 FROM golang:${GO_VERSION}-trixie AS gotoolchain
