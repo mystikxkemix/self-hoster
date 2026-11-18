@@ -270,6 +270,7 @@ function SystemInfo({ settings }: { settings: Settings }) {
     ['Data folder (state, checkouts, caches)', settings.info.dataDir],
     ['Projects data folders (DATA_DIR)', settings.info.appsDir],
     ['Allowed project ports', settings.info.ports || 'any'],
+    ['Version', settings.version],
   ];
   return (
     <section className="info">
@@ -284,7 +285,10 @@ function SystemInfo({ settings }: { settings: Settings }) {
           </div>
         ))}
       </dl>
-      <p className="hint">These come from the container environment and its volumes (docker-compose.yml).</p>
+      <p className="hint">
+        These come from the container environment and its volumes (docker-compose.yml). The version is also the
+        tag of the running Docker image.
+      </p>
     </section>
   );
 }

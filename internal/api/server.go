@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 
+	"selfhoster/internal/buildinfo"
 	"selfhoster/internal/mcp"
 	"selfhoster/internal/oauth"
 	"selfhoster/internal/projects"
@@ -45,6 +46,8 @@ type Info struct {
 type settingsView struct {
 	settings.View
 	Info Info `json:"info"`
+	// Version is the running build: "1.42" from CI, a short commit locally, or "dev".
+	Version string `json:"version"`
 }
 
 type server struct {
@@ -219,7 +222,7 @@ func (s *server) projectLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) getSettings(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, settingsView{View: s.settings.View(), Info: s.info})
+	writeJSON(w, http.StatusOK, settingsView{View: s.settings.View(), Info: s.info, Version: buildinfo.Version()})
 }
 
 // updateSettings saves the editable settings. Changing the username makes the browser
@@ -233,7 +236,7 @@ func (s *server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, settingsView{View: s.settings.View(), Info: s.info})
+	writeJSON(w, http.StatusOK, settingsView{View: s.settings.View(), Info: s.info, Version: buildinfo.Version()})
 }
 
 type passwordChange struct {
