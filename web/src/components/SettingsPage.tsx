@@ -1,6 +1,6 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { api, errorMessage } from '../lib/api';
-import type { Settings } from '../lib/types';
+import type { McpStatus, Settings } from '../lib/types';
 
 interface Props {
   settings: Settings;
@@ -26,6 +26,7 @@ export function SettingsPage({ settings, onSaved }: Props) {
       </header>
       <GeneralSettings settings={settings} onSaved={onSaved} />
       <PasswordSettings settings={settings} onSaved={onSaved} />
+      <McpSettings />
       <SystemInfo settings={settings} />
     </div>
   );
@@ -192,6 +193,75 @@ function PasswordSettings({ settings }: Props) {
         {status && <span className={status.ok ? 'success' : 'error'}>{status.text}</span>}
       </div>
     </form>
+  );
+}
+
+/** Lists the MCP clients (Claude) authorized through OAuth, and revokes them. */
+function McpSettings() {
+  const [mcp, setMcp] = useState<McpStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+
+  const load = () => api.mcp().then(setMcp, (err) => setError(errorMessage(err)));
+  useEffect(() => {
+    load();
+  }, []);
+
+  const revoke = async (id: string) => {
+    setRevoking(id);
+    setError(null);
+    try {
+      await api.revokeMcpConnection(id);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setRevoking(null);
+    }
+  };
+
+  return (
+    <section className="info">
+      <h3>Claude (MCP)</h3>
+      {mcp && !mcp.enabled && (
+        <p className="hint">
+          Disabled. Set <code>SELFHOSTER_MCP_URL</code> to the public HTTPS address of this server to let Claude
+          manage projects through an OAuth-protected MCP endpoint.
+        </p>
+      )}
+      {mcp?.enabled && (
+        <>
+          <p className="hint section-hint">
+            Add <code>{mcp.url}</code> as a custom connector in Claude. Connecting asks for the admin username and
+            password.
+          </p>
+          {mcp.connections.length === 0 ? (
+            <p className="hint">No client connected.</p>
+          ) : (
+            <dl>
+              {mcp.connections.map((c) => (
+                <div key={c.id}>
+                  <dt>
+                    {c.clientName}
+                    <br />
+                    <span className="hint">
+                      Connected {new Date(c.createdAt).toLocaleString()}, last used{' '}
+                      {new Date(c.lastUsed).toLocaleString()}
+                    </span>
+                  </dt>
+                  <dd>
+                    <button type="button" className="danger" disabled={revoking === c.id} onClick={() => revoke(c.id)}>
+                      {revoking === c.id ? 'Revoking…' : 'Revoke'}
+                    </button>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </>
+      )}
+      {error && <p className="error">{error}</p>}
+    </section>
   );
 }
 

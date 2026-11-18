@@ -9,6 +9,9 @@ import (
 	"log"
 	"net/http"
 
+	"selfhoster/internal/mcp"
+	"selfhoster/internal/oauth"
+	"selfhoster/internal/projects"
 	"selfhoster/internal/settings"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
@@ -47,13 +50,26 @@ type settingsView struct {
 type server struct {
 	store    *store.Store
 	sup      *supervisor.Supervisor
+	projects *projects.Service
 	settings *settings.Manager
-	info     Info
+	// mcp is the OAuth provider of the MCP endpoint, nil when it is disabled.
+	mcp  *oauth.Provider
+	info Info
 }
 
-// New returns the admin HTTP handler, protected by basic auth against the settings.
-func New(st *store.Store, sup *supervisor.Supervisor, set *settings.Manager, info Info) http.Handler {
-	s := &server{store: st, sup: sup, settings: set, info: info}
+// mcpView is the MCP section of the settings page.
+type mcpView struct {
+	Enabled bool `json:"enabled"`
+	// URL is the public MCP endpoint ("" when disabled).
+	URL         string             `json:"url"`
+	Connections []oauth.Connection `json:"connections"`
+}
+
+// New returns the admin HTTP handler. The admin UI and API use basic auth against the
+// settings. When provider is not nil, the same handler also serves the MCP endpoint
+// for Claude and its OAuth routes, which use OAuth instead of basic auth.
+func New(st *store.Store, sup *supervisor.Supervisor, set *settings.Manager, provider *oauth.Provider, info Info) http.Handler {
+	s := &server{store: st, sup: sup, projects: projects.New(st, sup), settings: set, mcp: provider, info: info}
 	mux := http.NewServeMux()
 	mux.Handle("GET /", uiHandler())
 	mux.HandleFunc("GET /api/projects", s.listProjects)
@@ -69,12 +85,20 @@ func New(st *store.Store, sup *supervisor.Supervisor, set *settings.Manager, inf
 	mux.HandleFunc("GET /api/settings", s.getSettings)
 	mux.HandleFunc("PUT /api/settings", s.updateSettings)
 	mux.HandleFunc("POST /api/settings/password", s.changePassword)
+	mux.HandleFunc("GET /api/mcp", s.getMCP)
+	mux.HandleFunc("DELETE /api/mcp/connections/{id}", s.revokeMCPConnection)
 	// Any other /api path (or a wrong method on an action) is an API error, not a UI page.
 	// Registered per method: a method-less "/api/" would conflict with "GET /".
 	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
 		mux.HandleFunc(method+" /api/", unknownAPIRoute)
 	}
-	return s.basicAuth(mux)
+	if provider == nil {
+		return s.basicAuth(mux)
+	}
+	root := http.NewServeMux()
+	mcp.Register(root, provider, mcp.New(st, sup, info.Ports))
+	root.Handle("/", s.basicAuth(mux))
+	return root
 }
 
 func unknownAPIRoute(w http.ResponseWriter, _ *http.Request) {
@@ -128,107 +152,62 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	if _, err := s.store.Get(p.Name); err == nil {
-		writeError(w, http.StatusConflict, errors.New("a project with this name already exists"))
+	p, err := s.projects.Create(p)
+	if err != nil {
+		writeError(w, statusFor(err, http.StatusBadRequest), err)
 		return
 	}
-	p.Enabled = false
-	if err := s.store.Put(p); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	s.sup.Configure(p)
 	writeJSON(w, http.StatusCreated, s.view(p))
 }
 
 // updateProject replaces a project's definition and restarts it if it is running,
 // so new environment variables take effect immediately.
 func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
-	current, ok := s.load(w, r)
-	if !ok {
-		return
-	}
 	var p store.Project
 	if !decode(w, r, &p) {
 		return
 	}
-	p.Name = current.Name
-	p.Enabled = current.Enabled
-	if err := s.store.Put(p); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	p.Name = r.PathValue("name")
+	p, err := s.projects.Save(p)
+	if err != nil {
+		writeError(w, statusFor(err, http.StatusBadRequest), err)
 		return
-	}
-	s.sup.Configure(p)
-	if s.sup.Status(p.Name).State != supervisor.StateStopped {
-		if err := s.sup.Restart(p); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
 	}
 	writeJSON(w, http.StatusOK, s.view(p))
 }
 
 func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.load(w, r)
-	if !ok {
-		return
-	}
-	if err := s.sup.Remove(p.Name); err != nil {
-		writeError(w, statusFor(err), err)
-		return
-	}
-	if err := s.store.Delete(p.Name); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+	if err := s.projects.Delete(r.PathValue("name")); err != nil {
+		writeError(w, statusFor(err, http.StatusInternalServerError), err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) deployProject(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.setEnabled(w, r, true)
-	if !ok {
-		return
-	}
-	if err := s.sup.Deploy(p); err != nil {
-		writeError(w, statusFor(err), err)
-		return
-	}
-	writeJSON(w, http.StatusAccepted, s.view(p))
+	s.action(w, r, s.projects.Deploy, http.StatusAccepted)
 }
 
 func (s *server) startProject(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.load(w, r)
-	if !ok {
-		return
-	}
-	if err := s.sup.Start(p); err != nil {
-		writeError(w, statusFor(err), err)
-		return
-	}
-	if p, ok = s.setEnabled(w, r, true); ok {
-		writeJSON(w, http.StatusOK, s.view(p))
-	}
+	s.action(w, r, s.projects.Start, http.StatusOK)
 }
 
 func (s *server) stopProject(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.setEnabled(w, r, false)
-	if !ok {
-		return
-	}
-	s.sup.Stop(p.Name)
-	writeJSON(w, http.StatusOK, s.view(p))
+	s.action(w, r, s.projects.Stop, http.StatusOK)
 }
 
 func (s *server) restartProject(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.setEnabled(w, r, true)
-	if !ok {
+	s.action(w, r, s.projects.Restart, http.StatusOK)
+}
+
+// action runs a lifecycle operation on the project named in the path.
+func (s *server) action(w http.ResponseWriter, r *http.Request, op func(string) (store.Project, error), okStatus int) {
+	p, err := op(r.PathValue("name"))
+	if err != nil {
+		writeError(w, statusFor(err, http.StatusInternalServerError), err)
 		return
 	}
-	if err := s.sup.Restart(p); err != nil {
-		writeError(w, statusFor(err), err)
-		return
-	}
-	writeJSON(w, http.StatusOK, s.view(p))
+	writeJSON(w, okStatus, s.view(p))
 }
 
 func (s *server) projectLogs(w http.ResponseWriter, r *http.Request) {
@@ -278,21 +257,29 @@ func (s *server) changePassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// setEnabled persists whether the project should run, so the choice survives container restarts.
-func (s *server) setEnabled(w http.ResponseWriter, r *http.Request, enabled bool) (store.Project, bool) {
-	p, ok := s.load(w, r)
-	if !ok {
-		return p, false
+func (s *server) getMCP(w http.ResponseWriter, _ *http.Request) {
+	view := mcpView{Connections: []oauth.Connection{}}
+	if s.mcp != nil {
+		view.Enabled = true
+		view.Connections = s.mcp.Connections()
+		if base := s.mcp.PublicURL(); base != "" {
+			view.URL = base + oauth.ResourcePath
+		}
 	}
-	if p.Enabled == enabled {
-		return p, true
+	writeJSON(w, http.StatusOK, view)
+}
+
+// revokeMCPConnection disconnects one MCP client at once (its tokens stop working).
+func (s *server) revokeMCPConnection(w http.ResponseWriter, r *http.Request) {
+	if s.mcp == nil {
+		writeError(w, http.StatusNotFound, errors.New("the MCP endpoint is disabled"))
+		return
 	}
-	p.Enabled = enabled
-	if err := s.store.Put(p); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return p, false
+	if err := s.mcp.Revoke(r.PathValue("id")); err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
 	}
-	return p, true
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *server) load(w http.ResponseWriter, r *http.Request) (store.Project, bool) {
@@ -318,14 +305,20 @@ func decode(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
-func statusFor(err error) int {
+// statusFor maps an operation error to an HTTP status; fallback covers the rest
+// (validation errors on edits, I/O errors on actions).
+func statusFor(err error, fallback int) int {
 	switch {
-	case errors.Is(err, supervisor.ErrBusy):
+	case errors.Is(err, store.ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, projects.ErrExists), errors.Is(err, supervisor.ErrBusy):
 		return http.StatusConflict
 	case errors.Is(err, supervisor.ErrNotDeployed):
 		return http.StatusBadRequest
-	default:
+	case errors.Is(err, projects.ErrRestartFailed):
 		return http.StatusInternalServerError
+	default:
+		return fallback
 	}
 }
 
