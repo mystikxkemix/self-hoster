@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"selfhoster/internal/oauth"
 	"selfhoster/internal/settings"
 	"selfhoster/internal/store"
 	"selfhoster/internal/supervisor"
@@ -32,7 +33,7 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	dataDir := t.TempDir()
-	st, err := store.Open(filepath.Join(dataDir, "config.json"), store.Options{ReservedPorts: []int{8080}, MinPort: 4000, MaxPort: 4019})
+	st, err := store.Open(filepath.Join(dataDir, "config.json"), store.Options{ReservedPort: 8080, MinPort: 4000, MaxPort: 4019})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,4 +397,58 @@ func TestMCPDisabled(t *testing.T) {
 	expect(t, code, body, http.StatusOK, `"enabled":false`)
 	code, body = f.do("DELETE", "/api/mcp/connections/abc", "")
 	expect(t, code, body, http.StatusNotFound, "disabled")
+}
+
+// TestMCPRoutes checks that, with MCP enabled, the MCP and OAuth routes skip basic
+// auth (they use OAuth) while the admin UI and API still require it.
+func TestMCPRoutes(t *testing.T) {
+	dataDir := t.TempDir()
+	st, err := store.Open(filepath.Join(dataDir, "config.json"), store.Options{ReservedPort: 8080})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sup := supervisor.New(dataDir, filepath.Join(dataDir, "apps"))
+	t.Cleanup(sup.Shutdown)
+	set, err := settings.Open(filepath.Join(dataDir, "settings.json"), settings.Defaults{AdminUser: testUser, AdminPassword: testPassword})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := oauth.Open(oauth.Config{Path: filepath.Join(dataDir, "oauth.json"), PublicURL: "https://mcp.example.com", Auth: set})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(New(st, sup, set, provider, Info{}))
+	t.Cleanup(srv.Close)
+	f := &fixture{t: t, srv: srv}
+
+	tests := []struct {
+		method, path string
+		want         int
+		wantAuth     string
+	}{
+		{"POST", "/mcp", http.StatusUnauthorized, `Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"`},
+		{"GET", "/mcp", http.StatusUnauthorized, "Bearer"},
+		{"GET", "/.well-known/oauth-authorization-server", http.StatusOK, ""},
+		{"GET", "/.well-known/oauth-protected-resource", http.StatusOK, ""},
+		{"GET", "/authorize", http.StatusBadRequest, ""}, // reached: unknown client
+		{"GET", "/", http.StatusUnauthorized, "Basic"},
+		{"GET", "/api/projects", http.StatusUnauthorized, "Basic"},
+		{"GET", "/api/mcp", http.StatusUnauthorized, "Basic"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req, _ := http.NewRequest(tc.method, srv.URL+tc.path, nil)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res.Body.Close()
+			if res.StatusCode != tc.want || !strings.HasPrefix(res.Header.Get("WWW-Authenticate"), tc.wantAuth) {
+				t.Fatalf("status %d, WWW-Authenticate %q; want %d, %q", res.StatusCode, res.Header.Get("WWW-Authenticate"), tc.want, tc.wantAuth)
+			}
+		})
+	}
+
+	code, body := f.do("GET", "/api/mcp", "")
+	expect(t, code, body, http.StatusOK, `"url":"https://mcp.example.com/mcp"`)
 }

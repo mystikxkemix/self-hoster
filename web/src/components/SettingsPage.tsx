@@ -225,24 +225,15 @@ function McpSettings() {
       <h3>Claude (MCP)</h3>
       {mcp && !mcp.enabled && (
         <p className="hint">
-          Disabled. Set <code>SELFHOSTER_MCP_ADDR</code> (e.g. <code>:8091</code>) and <code>SELFHOSTER_MCP_URL</code>{' '}
-          to let Claude manage projects through an OAuth-protected MCP endpoint.
+          Disabled. Set <code>SELFHOSTER_MCP_URL</code> to the public HTTPS address of this server to let Claude
+          manage projects through an OAuth-protected MCP endpoint.
         </p>
       )}
       {mcp?.enabled && (
         <>
           <p className="hint section-hint">
-            {mcp.url ? (
-              <>
-                Add <code>{mcp.url}</code> as a custom connector in Claude. Connecting asks for the admin username and
-                password.
-              </>
-            ) : (
-              <>
-                Enabled. Set <code>SELFHOSTER_MCP_URL</code> to your public HTTPS address so the endpoint URL shows
-                here.
-              </>
-            )}
+            Add <code>{mcp.url}</code> as a custom connector in Claude. Connecting asks for the admin username and
+            password.
           </p>
           {mcp.connections.length === 0 ? (
             <p className="hint">No client connected.</p>
