@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 
+	"selfhoster/internal/mcp"
 	"selfhoster/internal/oauth"
 	"selfhoster/internal/projects"
 	"selfhoster/internal/settings"
@@ -59,13 +60,14 @@ type server struct {
 // mcpView is the MCP section of the settings page.
 type mcpView struct {
 	Enabled bool `json:"enabled"`
-	// URL is the public MCP endpoint ("" when disabled or derived from requests).
+	// URL is the public MCP endpoint ("" when disabled).
 	URL         string             `json:"url"`
 	Connections []oauth.Connection `json:"connections"`
 }
 
-// New returns the admin HTTP handler, protected by basic auth against the settings.
-// provider is nil when the MCP endpoint is disabled.
+// New returns the admin HTTP handler. The admin UI and API use basic auth against the
+// settings. When provider is not nil, the same handler also serves the MCP endpoint
+// for Claude and its OAuth routes, which use OAuth instead of basic auth.
 func New(st *store.Store, sup *supervisor.Supervisor, set *settings.Manager, provider *oauth.Provider, info Info) http.Handler {
 	s := &server{store: st, sup: sup, projects: projects.New(st, sup), settings: set, mcp: provider, info: info}
 	mux := http.NewServeMux()
@@ -90,7 +92,13 @@ func New(st *store.Store, sup *supervisor.Supervisor, set *settings.Manager, pro
 	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
 		mux.HandleFunc(method+" /api/", unknownAPIRoute)
 	}
-	return s.basicAuth(mux)
+	if provider == nil {
+		return s.basicAuth(mux)
+	}
+	root := http.NewServeMux()
+	mcp.Register(root, provider, mcp.New(st, sup, info.Ports))
+	root.Handle("/", s.basicAuth(mux))
+	return root
 }
 
 func unknownAPIRoute(w http.ResponseWriter, _ *http.Request) {
