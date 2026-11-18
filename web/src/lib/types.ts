@@ -59,6 +59,8 @@ export function toSpec(p: ProjectSpec): ProjectSpec {
 
 /** Admin settings, saved in settings.json on the data volume (mirrors internal/settings.View). */
 export interface Settings {
+  /** Running build: "1.42" from CI, a short commit locally, or "dev". */
+  version: string;
   adminUser: string;
   /** "env" until the password is changed from the settings page. */
   passwordSource: 'env' | 'settings';
