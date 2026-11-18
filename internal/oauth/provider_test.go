@@ -342,6 +342,11 @@ func TestAuthorizeRejections(t *testing.T) {
 		if res.Header.Get("X-Frame-Options") != "DENY" {
 			t.Fatal("consent page can be framed")
 		}
+		// Browsers check form-action on the redirect after the post: the client's
+		// origin must be allowed, or clicking Allow is silently blocked.
+		if csp := res.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'self' https://claude.ai") {
+			t.Fatalf("CSP = %q, want the redirect origin in form-action", csp)
+		}
 	})
 	t.Run("unregistered redirect is never followed", func(t *testing.T) {
 		form := f.authForm(clientID)

@@ -340,13 +340,19 @@ func (p *Provider) renderAuthorize(w http.ResponseWriter, status int, req authRe
 	if name == "" {
 		name = "An MCP client"
 	}
-	host := req.RedirectURI
+	host, formAction := req.RedirectURI, "'self'"
 	if u, err := url.Parse(req.RedirectURI); err == nil {
 		host = u.Host
+		// Browsers apply form-action to the redirect that follows the form post, so
+		// the client's origin must be allowed or "Allow" does nothing. The redirect
+		// URI was checked against the registered client before this page is shown.
+		if origin := u.Scheme + "://" + u.Host; !strings.ContainsAny(origin, " ;,'\"") {
+			formAction += " " + origin
+		}
 	}
 	// The page asks for the admin password: never render it inside another site.
 	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'; default-src 'none'; style-src 'unsafe-inline'; form-action "+formAction)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
