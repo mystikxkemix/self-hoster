@@ -25,9 +25,9 @@ ZimaOS
 ## Install on ZimaOS
 
 CI publishes `ghcr.io/mystikxkemix/self-hoster` (linux/amd64) after the tests pass on
-`master`. Each push gets a version `1.<number of commits on master>` (e.g. `1.42`): the
+`master`. Each merge (or push) gets a version `2.<number of merges/pushes on master>` (e.g. `2.42`): the
 image is tagged with it and with `latest`, and the Settings page shows it. To stay on one
-version, use `:1.42` instead of `:latest`. The package is private:
+version, use `:2.42` instead of `:latest`. The package is private:
 
 1. Create a GitHub **classic** token with only `read:packages`, then on ZimaOS log in
    as your user (ZimaOS's root filesystem is read-only, so root cannot store a login)
