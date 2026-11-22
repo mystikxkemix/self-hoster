@@ -11,7 +11,7 @@ import (
 //	go build -ldflags "-X selfhoster/internal/buildinfo.version=1.42"
 //
 // The Dockerfile does this with the VERSION build arg. CI sets it to
-// 1.<number of commits on master>, the same value as the image tag.
+// 2.<number of merges/pushes on master>, the same value as the image tag.
 var version string
 
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)

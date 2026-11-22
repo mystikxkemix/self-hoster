@@ -19,7 +19,7 @@ RUN npm run build
 # --- Build the self-hoster binary (embeds the web app), cross-compiled ----------
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-trixie AS build
 ARG TARGETOS TARGETARCH
-# Version shown on the settings page, e.g. 1.42 (set by CI; the git commit or "dev" when empty).
+# Version shown on the settings page, e.g. 2.42 (set by CI; the git commit or "dev" when empty).
 ARG VERSION=
 WORKDIR /src
 COPY go.mod ./
